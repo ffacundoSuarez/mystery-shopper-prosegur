@@ -23,8 +23,21 @@ import {
   REVIEWABLE_SECTIONS,
   surveySections,
   getSectionTitle,
+  getModuleTitle,
+  getAllSectionModules,
 } from '@/lib/survey-config';
-import { getAnswerLabel, isEvidence } from '@/lib/format';
+import {
+  getAnswerLabel,
+  hasAnswerValue,
+  isEvidence,
+  isMatrixAnswer,
+  formatQuestionText,
+} from '@/lib/format';
+import {
+  getVisibleMatrixRows,
+  getVisibleQuestions,
+  isModuleVisible,
+} from '@/lib/survey-logic';
 import { AnswerValue, Question, StageStatus, StagesMap, SurveyResponse } from '@/lib/types';
 import { FileText, Check, X, MoreVertical, Unlock, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -52,7 +65,6 @@ const STAGE_STATUS_COLORS: Record<string, string> = {
 
 interface ResponseDetailsProps {
   response: SurveyResponse;
-  /** revision: todas las etapas con estados ops. results: solo aprobadas/rechazadas */
   mode?: ResponseDetailsMode;
   showStageActions?: boolean;
   onApproveStage?: (sectionId: string) => void;
@@ -62,50 +74,15 @@ interface ResponseDetailsProps {
   unlockLoading?: boolean;
 }
 
-function hasAnswerValue(value: AnswerValue | undefined): value is AnswerValue {
-  if (value === undefined || value === '') return false;
-  if (Array.isArray(value) && value.length === 0) return false;
-  return true;
-}
-
-function shouldShowQuestion(
+function renderAnswerCell(
   question: Question,
+  answer: AnswerValue | undefined,
   answers: Record<string, AnswerValue>
-): boolean {
-  if (!question.showIf) return true;
-  const dependent = answers[question.showIf.questionId];
-  if (!dependent) return false;
-  if (Array.isArray(dependent)) {
-    return question.showIf.values.some((v) => (dependent as string[]).includes(v));
-  }
-  return question.showIf.values.includes(dependent as string);
-}
-
-/** Preguntas a mostrar; si includeEmpty, incluye campos sin respuesta (ej. evidencia vacía) */
-function getQuestionsToDisplay(
-  response: SurveyResponse,
-  sectionId: string,
-  includeEmpty: boolean
-): Question[] {
-  const section = surveySections.find((s) => s.id === sectionId);
-  if (!section) return [];
-
-  const visible = section.questions.filter((q) =>
-    shouldShowQuestion(q, response.answers)
-  );
-
-  if (includeEmpty) return visible;
-
-  return visible.filter((q) => hasAnswerValue(response.answers[q.id]));
-}
-
-function renderAnswerCell(question: Question, answer: AnswerValue | undefined) {
+) {
   if (question.type === 'evidence') {
     if (!answer || !isEvidence(answer)) {
       return (
-        <span className="text-muted-foreground italic font-normal">
-          Sin evidencia adjunta
-        </span>
+        <span className="text-muted-foreground italic font-normal">Sin evidencia adjunta</span>
       );
     }
     return (
@@ -126,30 +103,38 @@ function renderAnswerCell(question: Question, answer: AnswerValue | undefined) {
     );
   }
 
-  if (!hasAnswerValue(answer)) {
+  if (question.type === 'matrix' && answer && isMatrixAnswer(answer)) {
+    const rows = getVisibleMatrixRows(question, answers);
+    const cols = question.matrixColumns ?? question.options ?? [];
     return (
-      <span className="text-muted-foreground italic font-normal">Sin respuesta</span>
+      <div className="space-y-1">
+        {rows
+          .filter((r) => answer[r.id] !== undefined)
+          .map((r) => {
+            const colLabel =
+              cols.find((c) => c.value === answer[r.id])?.label ?? answer[r.id];
+            return (
+              <div key={r.id}>
+                <span className="text-muted-foreground">{r.label}: </span>
+                {colLabel}
+              </div>
+            );
+          })}
+      </div>
     );
   }
 
-  return getAnswerLabel(question.id, answer);
+  if (!hasAnswerValue(answer)) {
+    return <span className="text-muted-foreground italic font-normal">Sin respuesta</span>;
+  }
+
+  return getAnswerLabel(question.id, answer as AnswerValue);
 }
 
 function stageWasSubmitted(status: StageStatus | undefined): boolean {
   return status === 'en_revision' || status === 'aprobada' || status === 'rechazada';
 }
 
-function resolveStageStatus(
-  sectionId: string,
-  stages: StagesMap,
-  hasAnswers: boolean
-): StageStatus {
-  const status = stages[sectionId]?.status;
-  if (status) return status;
-  return hasAnswers ? 'pendiente' : 'pendiente';
-}
-
-// Renderiza todas las etapas como secciones con estado y respuestas
 export function ResponseDetails({
   response,
   mode = 'revision',
@@ -166,16 +151,7 @@ export function ResponseDetails({
   const stages: StagesMap = response.stages || {};
   const isFinalized = response.answers['proceso-finalizado'] === 'si';
   const fechaFin =
-    (response.answers['fecha-fin'] as string) ||
-    response.fechaFin ||
-    '';
-
-  const generalSection = surveySections.find((s) => s.id === 'general');
-  const generalQuestions = generalSection
-    ? getQuestionsToDisplay(response, 'general', true).filter((q) =>
-        hasAnswerValue(response.answers[q.id])
-      )
-    : [];
+    (response.answers['fecha-fin'] as string) || response.fechaFin || '';
 
   const reviewableSectionIds =
     mode === 'results'
@@ -201,32 +177,63 @@ export function ResponseDetails({
       await onRejectStage?.(rejectDialogSectionId, rejectMessage.trim());
       closeRejectDialog();
     } catch {
-      // El padre muestra el toast de error; mantener el diálogo abierto
+      // padre muestra toast
     }
+  };
+
+  const renderModuleBlock = (sectionId: string, moduleId: string) => {
+    const section = surveySections.find((s) => s.id === sectionId);
+    const module = section ? getAllSectionModules(section).find((m) => m.id === moduleId) : undefined;
+    if (!module || !isModuleVisible(module, response.answers)) return null;
+
+    const questions = getVisibleQuestions(module, response.answers).filter(
+      (q) =>
+        stageWasSubmitted(stages[sectionId]?.status) ||
+        mode === 'results' ||
+        hasAnswerValue(response.answers[q.id])
+    );
+
+    if (questions.length === 0) return null;
+
+    return (
+      <div key={`${sectionId}-${moduleId}`} className="space-y-3 pl-2 border-l-2 border-muted">
+        <h5 className="font-medium text-base">{module.title}</h5>
+        {module.description && (
+          <p className="text-sm text-muted-foreground">{module.description}</p>
+        )}
+        <div className="grid gap-3">
+          {questions.map((question) => (
+            <div
+              key={question.id}
+              className="grid grid-cols-1 lg:grid-cols-2 gap-2 py-3 border-b last:border-0"
+            >
+                <span className="text-sm text-muted-foreground leading-relaxed">
+                  {formatQuestionText(question.text)}
+                </span>
+              <div className="text-sm font-medium">
+                {renderAnswerCell(question, response.answers[question.id], response.answers)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   };
 
   const renderSectionBlock = (sectionId: string) => {
     const section = surveySections.find((s) => s.id === sectionId);
     if (!section) return null;
 
-    const preliminaryQuestions = getQuestionsToDisplay(response, sectionId, false);
-    const hasAnyAnswer = preliminaryQuestions.some((q) =>
-      hasAnswerValue(response.answers[q.id])
+    const stageStatus = stages[sectionId]?.status;
+    const modules = getAllSectionModules(section).filter((m) =>
+      isModuleVisible(m, response.answers)
     );
-    const stageStatus =
-      sectionId === 'general'
-        ? undefined
-        : resolveStageStatus(sectionId, stages, hasAnyAnswer);
 
-    const submitted = stageWasSubmitted(stageStatus);
-    const questionsToShow = getQuestionsToDisplay(
-      response,
-      sectionId,
-      submitted || mode === 'results'
+    const hasAnswers = modules.some((m) =>
+      getVisibleQuestions(m, response.answers).some((q) =>
+        hasAnswerValue(response.answers[q.id])
+      )
     );
-    const hasAnswers = submitted
-      ? questionsToShow.length > 0
-      : hasAnyAnswer;
 
     if (mode === 'results' && stageStatus !== 'aprobada' && stageStatus !== 'rechazada') {
       return null;
@@ -294,24 +301,12 @@ export function ResponseDetails({
         {!hasAnswers ? (
           <p className="text-sm text-muted-foreground italic">
             {mode === 'revision'
-              ? 'El postulante aún no completó esta etapa.'
+              ? 'El shopper aún no completó esta parte.'
               : 'Sin respuestas registradas.'}
           </p>
         ) : (
-          <div className="grid gap-3">
-            {questionsToShow.map((question) => (
-              <div
-                key={question.id}
-                className="grid grid-cols-1 lg:grid-cols-2 gap-2 py-3 border-b last:border-0"
-              >
-                <span className="text-sm text-muted-foreground leading-relaxed">
-                  {question.text}
-                </span>
-                <div className="text-sm font-medium">
-                  {renderAnswerCell(question, response.answers[question.id])}
-                </div>
-              </div>
-            ))}
+          <div className="space-y-5">
+            {modules.map((m) => renderModuleBlock(sectionId, m.id))}
           </div>
         )}
       </div>
@@ -328,20 +323,20 @@ export function ResponseDetails({
       >
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Rechazar etapa</DialogTitle>
+            <DialogTitle>Rechazar parte</DialogTitle>
             <DialogDescription>
               {rejectDialogSectionId
-                ? `Indicá el motivo del rechazo para "${getSectionTitle(rejectDialogSectionId)}". El postulante verá este mensaje.`
+                ? `Indicá el motivo del rechazo para "${getSectionTitle(rejectDialogSectionId)}".`
                 : 'Indicá el motivo del rechazo.'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <Label htmlFor="reject-message">Mensaje para el postulante</Label>
+            <Label htmlFor="reject-message">Mensaje para el shopper</Label>
             <Textarea
               id="reject-message"
               value={rejectMessage}
               onChange={(e) => setRejectMessage(e.target.value)}
-              placeholder="Ej: Falta evidencia de la postulación o la fecha no coincide..."
+              placeholder="Ej: Falta evidencia o la fecha no coincide..."
               className="min-h-[100px]"
             />
           </div>
@@ -351,10 +346,7 @@ export function ResponseDetails({
             </Button>
             <Button
               variant="destructive"
-              disabled={
-                !rejectMessage.trim() ||
-                actionLoading === rejectDialogSectionId
-              }
+              disabled={!rejectMessage.trim() || actionLoading === rejectDialogSectionId}
               onClick={confirmReject}
             >
               {actionLoading === rejectDialogSectionId ? (
@@ -383,22 +375,11 @@ export function ResponseDetails({
               </span>
             )}
           </div>
-
           {mode === 'revision' && onUnlockSurvey && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="shrink-0 h-8 w-8"
-                  disabled={unlockLoading}
-                  aria-label="Opciones del proceso"
-                >
-                  {unlockLoading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <MoreVertical className="w-4 h-4" />
-                  )}
+                <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8" disabled={unlockLoading}>
+                  {unlockLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <MoreVertical className="w-4 h-4" />}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -412,17 +393,15 @@ export function ResponseDetails({
         </div>
       )}
 
-      {generalQuestions.length > 0 && renderSectionBlock('general')}
-
       {reviewableSectionIds.map((sectionId) => renderSectionBlock(sectionId))}
 
       {mode === 'results' && reviewableSectionIds.length === 0 && (
         <p className="text-sm text-muted-foreground text-center py-8">
-          No hay etapas aprobadas o rechazadas para mostrar.
+          No hay partes aprobadas o rechazadas para mostrar.
         </p>
       )}
     </div>
   );
 }
 
-export { getSectionTitle };
+export { getSectionTitle, getModuleTitle };

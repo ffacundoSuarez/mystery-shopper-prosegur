@@ -6,15 +6,27 @@ import {
   getResumeSectionIndex,
   getSectionTitle,
   getNextReviewableSection,
+  getSectionModules,
+  isLastVisibleModule,
+  isReviewableSection,
 } from '@/lib/survey-config';
-import { AnswerValue, EvidenceFile, Question, StageStatus, StagesMap } from '@/lib/types';
+import {
+  getDisqualification,
+  getOrderedOptions,
+  getPartAnswers,
+  getProgressiveQuestions,
+  getVisibleMatrixRows,
+  isModuleComplete,
+  partHasAnswers,
+} from '@/lib/survey-logic';
+import { formatQuestionText } from '@/lib/format';
+import { AnswerValue, EvidenceFile, MatrixAnswer, Question, StageStatus, StagesMap, SurveyModule } from '@/lib/types';
 import { getResponseByToken, saveStageByToken, uploadEvidence, finalizeProcessByToken } from '@/lib/data';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -37,18 +49,18 @@ import {
   Clock,
   AlertCircle,
   Lock,
+  CheckCircle2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 const STAGE_STATUS_TEXT: Record<StageStatus, string> = {
-  pendiente: 'pendente',
-  en_revision: 'em revisão',
-  aprobada: 'aprovada',
-  rechazada: 'reprovada',
+  pendiente: 'pendiente',
+  en_revision: 'en revisión',
+  aprobada: 'aprobada',
+  rechazada: 'rechazada',
 };
 
-// Compara respuestas de una sección para detectar ediciones
 function sectionAnswersEqual(
   a: Record<string, AnswerValue>,
   b: Record<string, AnswerValue>
@@ -56,9 +68,8 @@ function sectionAnswersEqual(
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-// ¿La etapa de postulación ya fue enviada al menos una vez?
-function isPostulacionCompleted(stages: StagesMap): boolean {
-  const status = stages.postulacion?.status;
+function isParte1Completed(stages: StagesMap): boolean {
+  const status = stages['parte-1']?.status;
   return status === 'en_revision' || status === 'aprobada' || status === 'rechazada';
 }
 
@@ -66,32 +77,43 @@ type FinalizeDialogStep = 'ask' | 'date';
 
 export function SurveyForm({ accessToken }: { accessToken: string }) {
   const [currentSection, setCurrentSection] = useState(0);
+  const [currentModuleIndex, setCurrentModuleIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
   const [stages, setStages] = useState<StagesMap>({});
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  /** Cartel de estado (aprobada/en revisión): oculta el formulario hasta "Ver respuestas" */
   const [showStageGate, setShowStageGate] = useState(false);
+  const [surveyThankYou, setSurveyThankYou] = useState(false);
   const [uploading, setUploading] = useState<Record<string, boolean>>({});
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
-  /** Snapshot al entrar a la sección: solo re-envía a revisión si hubo cambios */
   const [sectionBaseline, setSectionBaseline] = useState<Record<string, AnswerValue>>({});
-  /** Cartel al ingresar: ¿ya finalizó el proceso? */
   const [finalizeDialogOpen, setFinalizeDialogOpen] = useState(false);
   const [finalizeDialogStep, setFinalizeDialogStep] = useState<FinalizeDialogStep>('ask');
   const [finalizeFecha, setFinalizeFecha] = useState('');
   const [finalizing, setFinalizing] = useState(false);
 
   const isFinalized = answers['proceso-finalizado'] === 'si';
-
-  const totalSections = surveySections.length;
-  const progress = ((currentSection + 1) / totalSections) * 100;
   const section = surveySections[currentSection];
   const sectionId = section.id;
+  const isReviewable = isReviewableSection(sectionId);
   const currentStageStatus = stages[sectionId]?.status as StageStatus | undefined;
-  const isGeneral = sectionId === 'general';
-  const isReviewable = !isGeneral;
+
+  const visibleModules = useMemo(
+    () => getSectionModules(section, answers),
+    [section, answers]
+  );
+
+  const currentModule: SurveyModule | undefined =
+    visibleModules[currentModuleIndex] ?? visibleModules[0];
+
+  const moduleProgress = useMemo(() => {
+    if (visibleModules.length === 0) return 0;
+    return ((currentModuleIndex + 1) / visibleModules.length) * 100;
+  }, [currentModuleIndex, visibleModules.length]);
+
+  const totalSections = surveySections.length;
+  const sectionProgress = ((currentSection + 1) / totalSections) * 100;
 
   const nextSectionTitle = useMemo(() => {
     const nextId = getNextReviewableSection(sectionId);
@@ -108,50 +130,31 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
     (secId: string, source: Record<string, AnswerValue> = answers) => {
       const sec = surveySections.find((s) => s.id === secId);
       if (!sec) return {};
-      const sectionAnswers: Record<string, AnswerValue> = {};
-      for (const q of sec.questions) {
-        if (source[q.id] !== undefined) {
-          sectionAnswers[q.id] = source[q.id];
-        }
-      }
-      return sectionAnswers;
+      return getPartAnswers(sec, source);
     },
     [answers]
   );
 
   const hasSectionEdits = useMemo(() => {
-    if (isGeneral) return false;
     return !sectionAnswersEqual(getSectionAnswers(sectionId), sectionBaseline);
-  }, [answers, sectionBaseline, sectionId, isGeneral, getSectionAnswers]);
+  }, [answers, sectionBaseline, sectionId, getSectionAnswers]);
 
-  // ¿La sección actual tiene al menos una respuesta cargada por el postulante?
-  // (opción elegida, texto, fecha, escala o evidencia subida)
-  const currentSectionHasAnswer = useMemo(() => {
-    return section.questions.some((q) => {
-      const v = answers[q.id];
-      if (v === undefined || v === null || v === '') return false;
-      if (Array.isArray(v)) return v.length > 0;
-      return true;
-    });
-  }, [answers, section]);
+  const currentModuleComplete = useMemo(() => {
+    if (!currentModule) return false;
+    return isModuleComplete(currentModule, answers);
+  }, [answers, currentModule]);
 
-  // ¿Hay que enviar esta etapa a revisión al avanzar?
   const shouldSubmitForReview = useMemo(() => {
-    if (isGeneral) return false;
-    // No enviar a revisión una etapa vacía: requiere al menos una respuesta
-    if (!currentSectionHasAnswer) return false;
+    if (!isReviewable) return false;
+    if (!partHasAnswers(section, answers)) return false;
     if (!currentStageStatus || currentStageStatus === 'pendiente') return true;
     if (currentStageStatus === 'rechazada') return hasSectionEdits;
-    // aprobada o en_revision: solo si editó algo
     return hasSectionEdits;
-  }, [isGeneral, currentStageStatus, hasSectionEdits, currentSectionHasAnswer]);
+  }, [isReviewable, section, answers, currentStageStatus, hasSectionEdits]);
 
   const showStatusBanner =
-    isReviewable &&
-    currentStageStatus &&
-    currentStageStatus !== 'pendiente';
+    isReviewable && currentStageStatus && currentStageStatus !== 'pendiente';
 
-  // Cargar encuesta
   useEffect(() => {
     let active = true;
     (async () => {
@@ -159,13 +162,17 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
         const existing = await getResponseByToken(accessToken);
         if (!active) return;
         if (existing) {
-          setAnswers(existing.answers || {});
+          const ans = existing.answers || {};
+          setAnswers(ans);
           setStages(existing.stages || {});
           setCode(existing.code || '');
           setCurrentSection(getResumeSectionIndex(existing.stages || {}));
+          if (ans['encuesta-cerrada'] === 'si') {
+            setSurveyThankYou(true);
+          }
         }
       } catch {
-        toast.error('Não foi possível carregar o formulário');
+        toast.error('No se pudo cargar el formulario');
       } finally {
         if (active) setLoading(false);
       }
@@ -175,22 +182,19 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
     };
   }, [accessToken]);
 
-  // Al ingresar: si ya completó postulación y no finalizó, preguntar una vez
   useEffect(() => {
     if (loading) return;
     if (answers['proceso-finalizado'] === 'si') return;
-    if (!isPostulacionCompleted(stages)) return;
+    if (!isParte1Completed(stages)) return;
     setFinalizeDialogOpen(true);
     setFinalizeDialogStep('ask');
-    // Solo al cargar la encuesta (reingreso)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading]);
 
-  // Al cambiar de sección: baseline + cartel si aprobada/en revisión
   useEffect(() => {
     if (loading) return;
+    setCurrentModuleIndex(0);
     setSectionBaseline(getSectionAnswers(sectionId, answers));
-
     if (isReviewable) {
       const status = stages[sectionId]?.status;
       setShowStageGate(status === 'aprobada' || status === 'en_revision');
@@ -200,23 +204,15 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentSection, loading]);
 
-  const shouldShowQuestion = useCallback(
-    (question: Question): boolean => {
-      if (!question.showIf) return true;
-      const dependent = answers[question.showIf.questionId];
-      if (!dependent) return false;
-      if (Array.isArray(dependent)) {
-        return question.showIf.values.some((v) =>
-          (dependent as string[]).includes(v)
-        );
-      }
-      return question.showIf.values.includes(dependent as string);
-    },
-    [answers]
-  );
-
   const updateAnswer = (questionId: string, value: AnswerValue) => {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
+  };
+
+  const updateMatrixCell = (questionId: string, rowId: string, value: string) => {
+    setAnswers((prev) => {
+      const current = (prev[questionId] as MatrixAnswer) || {};
+      return { ...prev, [questionId]: { ...current, [rowId]: value } };
+    });
   };
 
   const toggleMultipleChoice = (questionId: string, value: string) => {
@@ -227,11 +223,8 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
     updateAnswer(questionId, updated);
   };
 
-  const handleEvidenceUpload = async (
-    questionId: string,
-    files: FileList | null
-  ) => {
-    if (isFinalized) return;
+  const handleEvidenceUpload = async (questionId: string, files: FileList | null) => {
+    if (isFinalized || surveyThankYou) return;
     if (!files || files.length === 0) return;
     setUploading((p) => ({ ...p, [questionId]: true }));
     try {
@@ -245,9 +238,9 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
       }
       const current = (answers[questionId] as EvidenceFile[]) || [];
       updateAnswer(questionId, [...current, ...uploaded]);
-      toast.success('Arquivo enviado com sucesso');
+      toast.success('Archivo enviado correctamente');
     } catch {
-      toast.error('Erro ao enviar o arquivo');
+      toast.error('Error al enviar el archivo');
     } finally {
       setUploading((p) => ({ ...p, [questionId]: false }));
       setUploadProgress((p) => ({ ...p, [questionId]: 0 }));
@@ -256,10 +249,16 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
 
   const removeEvidence = (questionId: string, url: string) => {
     const current = (answers[questionId] as EvidenceFile[]) || [];
-    updateAnswer(
-      questionId,
-      current.filter((f) => f.url !== url)
-    );
+    updateAnswer(questionId, current.filter((f) => f.url !== url));
+  };
+
+  const advanceToNextModule = () => {
+    if (currentModuleIndex < visibleModules.length - 1) {
+      setCurrentModuleIndex((i) => i + 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return true;
+    }
+    return false;
   };
 
   const advanceToNextSection = () => {
@@ -270,7 +269,7 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
   };
 
   const saveCurrentSection = async (advance: boolean, submitReview: boolean) => {
-    if (isFinalized) return;
+    if (isFinalized || surveyThankYou) return;
     setSaving(true);
     try {
       const sectionAnswers = getSectionAnswers(sectionId);
@@ -285,38 +284,88 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
       setSectionBaseline(getSectionAnswers(sectionId, updated.answers || {}));
 
       if (submitReview && isReviewable) {
-        toast.success(`Etapa "${section.title}" enviada para revisão`);
-        // No avanzamos automáticamente: mostramos el bloque de estado (gate)
-        // para que el postulante decida avanzar a la siguiente etapa o ver
-        // sus respuestas. Es el mismo bloque que aparece al reingresar.
+        toast.success(`"${section.title}" enviada para revisión`);
         setShowStageGate(true);
         return;
       }
 
       if (advance) advanceToNextSection();
     } catch {
-      toast.error('Não foi possível salvar a etapa');
+      toast.error('No se pudo guardar');
     } finally {
       setSaving(false);
     }
   };
 
-  const goToNextSection = async () => {
-    if (shouldSubmitForReview) {
-      await saveCurrentSection(true, true);
+  const handleSurveyThankYou = async () => {
+    setSaving(true);
+    try {
+      const sectionAnswers = {
+        ...getSectionAnswers(sectionId),
+        'encuesta-cerrada': 'si',
+      };
+      const updated = await saveStageByToken(
+        accessToken,
+        sectionId,
+        sectionAnswers,
+        false
+      );
+      setAnswers(updated.answers || {});
+      setSurveyThankYou(true);
+    } catch {
+      toast.error('No se pudo guardar');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const goToNext = async () => {
+    if (!currentModuleComplete) return;
+
+    const dq = getDisqualification(surveySections, answers);
+    if (dq.terminated) {
+      await handleSurveyThankYou();
       return;
     }
 
-    // Sin cambios en etapa ya enviada/aprobada: solo avanzar
-    if (isGeneral) {
-      await saveCurrentSection(true, false);
+    const lastModule = isLastVisibleModule(section, currentModuleIndex, answers);
+
+    if (!lastModule) {
+      setSaving(true);
+      try {
+        const sectionAnswers = getSectionAnswers(sectionId);
+        const updated = await saveStageByToken(
+          accessToken,
+          sectionId,
+          sectionAnswers,
+          false
+        );
+        setStages(updated.stages || {});
+        setAnswers(updated.answers || {});
+        setSectionBaseline(getSectionAnswers(sectionId, updated.answers || {}));
+        advanceToNextModule();
+      } catch {
+        toast.error('No se pudo guardar');
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
+    if (shouldSubmitForReview) {
+      await saveCurrentSection(true, true);
       return;
     }
 
     advanceToNextSection();
   };
 
-  const goToPreviousSection = () => {
+  const goToPrevious = () => {
+    if (currentModuleIndex > 0) {
+      setCurrentModuleIndex((i) => i - 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     if (currentSection > 0) {
       setCurrentSection((prev) => prev - 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -330,9 +379,7 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
     }
   };
 
-  const openResponsesForEdit = () => {
-    setShowStageGate(false);
-  };
+  const openResponsesForEdit = () => setShowStageGate(false);
 
   const handleFinalizeNo = () => {
     setFinalizeDialogOpen(false);
@@ -340,13 +387,11 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
     setFinalizeFecha('');
   };
 
-  const handleFinalizeYes = () => {
-    setFinalizeDialogStep('date');
-  };
+  const handleFinalizeYes = () => setFinalizeDialogStep('date');
 
   const handleFinalizeSubmit = async () => {
     if (!finalizeFecha) {
-      toast.error('Indique a data de término do processo');
+      toast.error('Indique la fecha de término');
       return;
     }
     setFinalizing(true);
@@ -355,225 +400,113 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
       setAnswers(updated.answers || {});
       setStages(updated.stages || {});
       setFinalizeDialogOpen(false);
-      toast.success('Processo finalizado com sucesso');
+      toast.success('Proceso finalizado');
     } catch {
-      toast.error('Não foi possível finalizar o processo');
+      toast.error('No se pudo finalizar');
     } finally {
       setFinalizing(false);
     }
   };
 
-  const renderFinalizeDialog = () => (
-    <Dialog
-      open={finalizeDialogOpen}
-      onOpenChange={(open) => {
-        if (!open) handleFinalizeNo();
-        else setFinalizeDialogOpen(true);
-      }}
-    >
-      <DialogContent className="max-w-md">
-        {finalizeDialogStep === 'ask' ? (
-          <>
-            <DialogHeader>
-              <DialogTitle>Você já finalizou o processo?</DialogTitle>
-              <DialogDescription>
-                Se o processo seletivo já terminou para você, podemos registrar a data de
-                encerramento e fechar o formulário.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter className="flex-col sm:flex-row gap-2">
-              <Button variant="outline" onClick={handleFinalizeNo} className="flex-1">
-                Não, continuar
-              </Button>
-              <Button onClick={handleFinalizeYes} className="flex-1">
-                Sim, finalizou
-              </Button>
-            </DialogFooter>
-          </>
-        ) : (
-          <>
-            <DialogHeader>
-              <DialogTitle>Data de término do processo</DialogTitle>
-              <DialogDescription>
-                Indique em qual data o processo seletivo terminou para você.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="py-2">
-              <Label htmlFor="finalize-fecha">Data</Label>
-              <Input
-                id="finalize-fecha"
-                type="date"
-                value={finalizeFecha}
-                onChange={(e) => setFinalizeFecha(e.target.value)}
-                className="mt-2"
-              />
-            </div>
-            <DialogFooter className="flex-col sm:flex-row gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setFinalizeDialogStep('ask')}
-                disabled={finalizing}
-              >
-                Voltar
-              </Button>
-              <Button onClick={handleFinalizeSubmit} disabled={finalizing || !finalizeFecha}>
-                {finalizing ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Check className="w-4 h-4 mr-2" />
-                )}
-                Enviar e encerrar
-              </Button>
-            </DialogFooter>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
+  const renderMatrix = (question: Question) => {
+    const rows = getVisibleMatrixRows(question, answers);
+    const cols = question.matrixColumns ?? question.options ?? [];
+    const matrixVal = (answers[question.id] as MatrixAnswer) || {};
 
-  const renderFinalizedScreen = () => {
-    const fechaFin = (answers['fecha-fin'] as string) || '';
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 flex items-center justify-center p-4">
-        <Card className="max-w-md w-full border-0 shadow-lg">
-          <CardHeader className="text-center pb-2">
-            <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
-              <Lock className="w-6 h-6 text-muted-foreground" />
-            </div>
-            <CardTitle className="text-2xl">Processo encerrado</CardTitle>
-            <CardDescription className="text-base">
-              O formulário foi finalizado e não aceita mais respostas.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="text-center space-y-2 pb-8">
-            {code && (
-              <p className="text-sm text-muted-foreground">
-                Código: <span className="font-mono font-medium text-foreground">{code}</span>
-              </p>
-            )}
-            {fechaFin && (
-              <p className="text-sm">
-                Data de término:{' '}
-                <span className="font-medium">
-                  {new Date(fechaFin + 'T12:00:00').toLocaleDateString('pt-BR')}
-                </span>
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    );
-  };
-
-  const renderStageGateBanner = () => {
-    if (!showStatusBanner || !currentStageStatus) return null;
-
-    const rejectionMessage = stages[sectionId]?.rejectionMessage;
-
-    const statusStyles = {
-      aprobada: 'bg-green-50 text-green-800 border-green-200',
-      en_revision: 'bg-amber-50 text-amber-800 border-amber-200',
-      rechazada: 'bg-red-50 text-red-800 border-red-200',
-    }[currentStageStatus];
-
-    const StatusIcon =
-      currentStageStatus === 'aprobada'
-        ? Check
-        : currentStageStatus === 'en_revision'
-        ? Clock
-        : AlertCircle;
+    const handleCell = (rowId: string, colValue: string) => {
+      if (matrixVal[rowId] === colValue) {
+        const next = { ...matrixVal };
+        delete next[rowId];
+        updateAnswer(question.id, next);
+      } else {
+        updateMatrixCell(question.id, rowId, colValue);
+      }
+    };
 
     return (
-      <div className="max-w-2xl mx-auto px-4 pt-4 space-y-3">
-        <div className={cn('text-sm rounded-lg p-4 border', statusStyles)}>
-          <div className="flex items-center gap-2 font-medium mb-1">
-            <StatusIcon className="w-4 h-4 shrink-0" />
-            A etapa &quot;{section.title}&quot; está{' '}
-            {STAGE_STATUS_TEXT[currentStageStatus]}
-          </div>
-          {currentStageStatus === 'rechazada' && (
-            <>
-              {rejectionMessage && (
-                <div className="rounded-md border border-red-300/60 bg-red-100/40 p-3 mb-2">
-                  <p className="font-medium text-red-900 mb-1">Motivo da reprovação:</p>
-                  <p className="text-red-900/90 whitespace-pre-wrap">{rejectionMessage}</p>
-                </div>
-              )}
-              <p className="opacity-90 mb-2">
-                Corrija as informações e envie novamente quando estiver pronto.
-              </p>
-            </>
-          )}
-          {currentStageStatus !== 'rechazada' && (
-            <p className="text-sm opacity-80">
-              Complete a próxima etapa quando já a tiver realizado.
-            </p>
-          )}
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-2">
-          {nextSectionTitle && currentStageStatus !== 'rechazada' && (
-            <Button onClick={goToNextStage} className="flex-1">
-              Avançar para a etapa: {nextSectionTitle}
-              <ChevronRight className="w-4 h-4 ml-2" />
-            </Button>
-          )}
-          <Button
-            variant="outline"
-            onClick={openResponsesForEdit}
-            className="flex-1"
-          >
-            <Eye className="w-4 h-4 mr-2" />
-            Ver respostas
-          </Button>
-        </div>
+      <div className="space-y-3 overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr>
+              <th className="text-left p-2 border-b" />
+              {cols.map((col) => (
+                <th key={col.value} className="text-center p-2 border-b font-medium">
+                  {col.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.id} className="border-b last:border-0">
+                <td className="p-2 align-top text-muted-foreground">{row.label}</td>
+                {cols.map((col) => (
+                  <td key={col.value} className="p-2 text-center">
+                    <input
+                      type="radio"
+                      name={`${question.id}-${row.id}`}
+                      checked={matrixVal[row.id] === col.value}
+                      onClick={() => handleCell(row.id, col.value)}
+                      onChange={() => handleCell(row.id, col.value)}
+                      className="w-4 h-4 accent-primary cursor-pointer"
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     );
   };
 
   const renderQuestion = (question: Question) => {
-    if (!shouldShowQuestion(question)) return null;
-    const options = question.options || [];
+    const options = getOrderedOptions(question, answers, accessToken);
+    const displayText = formatQuestionText(question.text);
 
     return (
       <div key={question.id} className="space-y-3">
         <Label className="text-base font-medium leading-relaxed">
-          {question.text}
+          {displayText}
           {question.required && <span className="text-red-500 ml-1">*</span>}
         </Label>
         {question.hint && (
           <p className="text-sm text-muted-foreground">{question.hint}</p>
         )}
 
+        {question.type === 'info' && question.hint && (
+          <p className="text-sm bg-muted/50 p-3 rounded-lg">{question.hint}</p>
+        )}
+
         {question.type === 'single' && options.length > 0 && (
-          <RadioGroup
-            value={(answers[question.id] as string) || ''}
-            onValueChange={(value) => updateAnswer(question.id, value)}
-            className="grid gap-2"
-          >
-            {options.map((option) => (
-              <label
-                key={option.value}
-                className={cn(
-                  'flex items-center space-x-3 p-4 rounded-lg border-2 cursor-pointer transition-all',
-                  answers[question.id] === option.value
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border hover:border-primary/50 hover:bg-muted/50'
-                )}
-              >
-                <RadioGroupItem value={option.value} id={`${question.id}-${option.value}`} />
-                <span className="flex-1 text-sm">{option.label}</span>
-              </label>
-            ))}
-          </RadioGroup>
+          <div className="grid gap-2">
+            {options.map((option) => {
+              const selected = answers[question.id] === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() =>
+                    updateAnswer(question.id, selected ? '' : option.value)
+                  }
+                  className={cn(
+                    'flex items-center text-left w-full p-4 rounded-lg border-2 cursor-pointer transition-all',
+                    selected
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border hover:border-primary/50 hover:bg-muted/50'
+                  )}
+                >
+                  <span className="flex-1 text-sm">{option.label}</span>
+                </button>
+              );
+            })}
+          </div>
         )}
 
         {question.type === 'multiple' && options.length > 0 && (
           <div className="grid gap-2">
             {options.map((option) => {
-              const isChecked = ((answers[question.id] as string[]) || []).includes(
-                option.value
-              );
+              const isChecked = ((answers[question.id] as string[]) || []).includes(option.value);
               return (
                 <label
                   key={option.value}
@@ -600,7 +533,7 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
             type="text"
             value={(answers[question.id] as string) || ''}
             onChange={(e) => updateAnswer(question.id, e.target.value)}
-            placeholder="Escreva sua resposta..."
+            placeholder="Escriba su respuesta..."
           />
         )}
 
@@ -608,7 +541,7 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
           <Textarea
             value={(answers[question.id] as string) || ''}
             onChange={(e) => updateAnswer(question.id, e.target.value)}
-            placeholder="Escreva sua resposta..."
+            placeholder="Escriba su respuesta..."
             className="min-h-[100px]"
           />
         )}
@@ -634,7 +567,6 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
             type="number"
             value={(answers[question.id] as string) || ''}
             onChange={(e) => updateAnswer(question.id, e.target.value)}
-            placeholder="0"
           />
         )}
 
@@ -652,7 +584,12 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
                     <button
                       key={value}
                       type="button"
-                      onClick={() => updateAnswer(question.id, value)}
+                      onClick={() =>
+                        updateAnswer(
+                          question.id,
+                          answers[question.id] === value ? '' : value
+                        )
+                      }
                       className={cn(
                         'w-9 h-9 rounded-full border-2 text-sm font-medium transition-all',
                         answers[question.id] === value
@@ -672,6 +609,8 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
           </div>
         )}
 
+        {question.type === 'matrix' && renderMatrix(question)}
+
         {question.type === 'evidence' && (
           <div className="space-y-3">
             <label className="block border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors cursor-pointer">
@@ -690,13 +629,12 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
               <p className="text-sm text-muted-foreground">
                 {uploading[question.id]
                   ? `Enviando... ${uploadProgress[question.id] || 0}%`
-                  : 'Clique para enviar qualquer arquivo (PDF, áudio, vídeo, imagem, etc.)'}
+                  : 'Clic para subir archivos'}
               </p>
               {uploading[question.id] && uploadProgress[question.id] > 0 && (
                 <Progress value={uploadProgress[question.id]} className="mt-3 h-2" />
               )}
             </label>
-
             <div className="grid gap-2">
               {((answers[question.id] as EvidenceFile[]) || []).map((file) => (
                 <div
@@ -728,6 +666,166 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
     );
   };
 
+  const renderFinalizeDialog = () => (
+    <Dialog
+      open={finalizeDialogOpen}
+      onOpenChange={(open) => {
+        if (!open) handleFinalizeNo();
+        else setFinalizeDialogOpen(true);
+      }}
+    >
+      <DialogContent className="max-w-md">
+        {finalizeDialogStep === 'ask' ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>¿Ya finalizó el proceso?</DialogTitle>
+              <DialogDescription>
+                Si el mystery ya terminó, podemos registrar la fecha de cierre.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="flex-col sm:flex-row gap-2">
+              <Button variant="outline" onClick={handleFinalizeNo} className="flex-1">
+                No, continuar
+              </Button>
+              <Button onClick={handleFinalizeYes} className="flex-1">
+                Sí, finalizó
+              </Button>
+            </DialogFooter>
+          </>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle>Fecha de término</DialogTitle>
+            </DialogHeader>
+            <div className="py-2">
+              <Label htmlFor="finalize-fecha">Fecha</Label>
+              <Input
+                id="finalize-fecha"
+                type="date"
+                value={finalizeFecha}
+                onChange={(e) => setFinalizeFecha(e.target.value)}
+                className="mt-2"
+              />
+            </div>
+            <DialogFooter className="flex-col sm:flex-row gap-2">
+              <Button variant="outline" onClick={() => setFinalizeDialogStep('ask')} disabled={finalizing}>
+                Volver
+              </Button>
+              <Button onClick={handleFinalizeSubmit} disabled={finalizing || !finalizeFecha}>
+                {finalizing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
+                Enviar y cerrar
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+
+  const renderThankYouScreen = () => (
+    <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 flex items-center justify-center p-4">
+      <Card className="max-w-md w-full border-0 shadow-lg">
+        <CardHeader className="text-center pb-2">
+          <div className="mx-auto w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mb-3">
+            <CheckCircle2 className="w-6 h-6 text-green-600" />
+          </div>
+          <CardTitle className="text-2xl">¡Muchas gracias por responder!</CardTitle>
+          <CardDescription className="text-base">
+            Sus respuestas fueron registradas correctamente. Agradecemos su tiempo y
+            colaboración.
+          </CardDescription>
+        </CardHeader>
+        {code && (
+          <CardContent className="text-center pb-8">
+            <p className="text-sm text-muted-foreground">
+              Código: <span className="font-mono font-medium text-foreground">{code}</span>
+            </p>
+          </CardContent>
+        )}
+      </Card>
+    </div>
+  );
+
+  const renderFinalizedScreen = () => {
+    const fechaFin = (answers['fecha-fin'] as string) || '';
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 flex items-center justify-center p-4">
+        <Card className="max-w-md w-full border-0 shadow-lg">
+          <CardHeader className="text-center pb-2">
+            <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
+              <Lock className="w-6 h-6 text-muted-foreground" />
+            </div>
+            <CardTitle className="text-2xl">Proceso cerrado</CardTitle>
+            <CardDescription className="text-base">
+              El formulario fue finalizado y no acepta más respuestas.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center space-y-2 pb-8">
+            {code && (
+              <p className="text-sm text-muted-foreground">
+                Código: <span className="font-mono font-medium text-foreground">{code}</span>
+              </p>
+            )}
+            {fechaFin && (
+              <p className="text-sm">
+                Fecha de término:{' '}
+                <span className="font-medium">
+                  {new Date(fechaFin + 'T12:00:00').toLocaleDateString('es-AR')}
+                </span>
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
+
+  const renderStageGateBanner = () => {
+    if (!showStatusBanner || !currentStageStatus) return null;
+
+    const rejectionMessage = stages[sectionId]?.rejectionMessage;
+    const statusStyles = {
+      aprobada: 'bg-green-50 text-green-800 border-green-200',
+      en_revision: 'bg-amber-50 text-amber-800 border-amber-200',
+      rechazada: 'bg-red-50 text-red-800 border-red-200',
+    }[currentStageStatus];
+
+    const StatusIcon =
+      currentStageStatus === 'aprobada' ? Check : currentStageStatus === 'en_revision' ? Clock : AlertCircle;
+
+    return (
+      <div className="max-w-2xl mx-auto px-4 pt-4 space-y-3">
+        <div className={cn('text-sm rounded-lg p-4 border', statusStyles)}>
+          <div className="flex items-center gap-2 font-medium mb-1">
+            <StatusIcon className="w-4 h-4 shrink-0" />
+            &quot;{section.title}&quot; está {STAGE_STATUS_TEXT[currentStageStatus]}
+          </div>
+          {currentStageStatus === 'rechazada' && rejectionMessage && (
+            <div className="rounded-md border border-red-300/60 bg-red-100/40 p-3 mb-2">
+              <p className="font-medium text-red-900 mb-1">Motivo del rechazo:</p>
+              <p className="text-red-900/90 whitespace-pre-wrap">{rejectionMessage}</p>
+            </div>
+          )}
+          {currentStageStatus !== 'rechazada' && (
+            <p className="text-sm opacity-80">Complete la siguiente parte cuando corresponda.</p>
+          )}
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2">
+          {nextSectionTitle && currentStageStatus !== 'rechazada' && (
+            <Button onClick={goToNextStage} className="flex-1">
+              Ir a: {nextSectionTitle}
+              <ChevronRight className="w-4 h-4 ml-2" />
+            </Button>
+          )}
+          <Button variant="outline" onClick={openResponsesForEdit} className="flex-1">
+            <Eye className="w-4 h-4 mr-2" />
+            Ver respuestas
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -736,35 +834,45 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
     );
   }
 
-  if (isFinalized) {
-    return renderFinalizedScreen();
-  }
+  if (surveyThankYou) return renderThankYouScreen();
+  if (isFinalized) return renderFinalizedScreen();
 
   const hideForm = showStageGate && (currentStageStatus === 'aprobada' || currentStageStatus === 'en_revision');
   const showBottomNext = !hideForm;
+  const isLastModule = isLastVisibleModule(section, currentModuleIndex, answers);
+  const progressiveQuestions = currentModule
+    ? getProgressiveQuestions(currentModule, answers)
+    : [];
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/30">
       {renderFinalizeDialog()}
+
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
-        <div className="max-w-2xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium">
-              {code ? `${code} · ` : ''}Seção {currentSection + 1} de {totalSections}
+        <div className="max-w-2xl mx-auto px-4 py-4 space-y-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="font-medium">
+              {code ? `${code} · ` : ''}
+              {section.title}
+              {currentModule && visibleModules.length > 1 && (
+                <span className="text-muted-foreground font-normal">
+                  {' '}
+                  — {currentModule.title}
+                </span>
+              )}
             </span>
-            <span className="text-sm text-muted-foreground">{Math.round(progress)}%</span>
+            <span className="text-muted-foreground">{Math.round(sectionProgress)}%</span>
           </div>
-          <Progress value={progress} className="h-2" />
+          <Progress value={moduleProgress} className="h-2" />
         </div>
       </div>
 
-      {/* Cartel de estado + avance (aprobada / en revisión / rechazada) */}
       {(showStageGate || showStatusBanner) && renderStageGateBanner()}
 
       {showStatusBanner && !showStageGate && hasSectionEdits && (
         <div className="max-w-2xl mx-auto px-4 pt-2">
           <p className="text-xs text-muted-foreground">
-            Você modificou respostas. Ao continuar, a etapa será enviada novamente para revisão.
+            Modificó respuestas. Al continuar, la parte se enviará nuevamente a revisión.
           </p>
         </div>
       )}
@@ -795,17 +903,24 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
         </div>
       </div>
 
-      {!hideForm && (
+      {!hideForm && currentModule && (
         <div className="max-w-2xl mx-auto px-4 pb-32">
           <Card className="border-0 shadow-lg">
             <CardHeader className="pb-4">
-              <CardTitle className="text-2xl">{section.title}</CardTitle>
-              {section.description && (
-                <CardDescription className="text-base">{section.description}</CardDescription>
+              <CardTitle className="text-2xl">{currentModule.title}</CardTitle>
+              {currentModule.description && (
+                <CardDescription className="text-base whitespace-pre-wrap">
+                  {currentModule.description}
+                </CardDescription>
               )}
             </CardHeader>
             <CardContent className="space-y-6">
-              {section.questions.map(renderQuestion)}
+              {progressiveQuestions.map(renderQuestion)}
+              {!currentModuleComplete && (
+                <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  Complete todas las preguntas para continuar.
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -817,42 +932,30 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
         <div className="max-w-2xl mx-auto px-4 py-4 flex gap-3">
           <Button
             variant="outline"
-            onClick={goToPreviousSection}
-            disabled={currentSection === 0}
+            onClick={goToPrevious}
+            disabled={currentSection === 0 && currentModuleIndex === 0}
           >
             <ChevronLeft className="w-4 h-4 mr-2" />
-            Voltar
+            Atrás
           </Button>
 
-          {showBottomNext &&
-            (currentSection === totalSections - 1 ? (
-              <Button
-                onClick={() => saveCurrentSection(false, shouldSubmitForReview)}
-                className="flex-1"
-                disabled={saving || !shouldSubmitForReview}
-              >
-                {saving ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Check className="w-4 h-4 mr-2" />
-                )}
-                {shouldSubmitForReview
-                  ? 'Enviar etapa para revisão'
-                  : isReviewable && !currentSectionHasAnswer
-                  ? 'Preencha algo para enviar'
-                  : 'Etapa sem alterações'}
-              </Button>
-            ) : (
-              <Button onClick={goToNextSection} className="flex-1" disabled={saving}>
-                {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                {shouldSubmitForReview
-                  ? 'Próximo'
-                  : isReviewable && !currentSectionHasAnswer
-                  ? 'Pular etapa'
-                  : 'Próxima etapa'}
-                <ChevronRight className="w-4 h-4 ml-2" />
-              </Button>
-            ))}
+          {showBottomNext && (
+            <Button
+              onClick={goToNext}
+              className="flex-1"
+              disabled={saving || !currentModuleComplete}
+            >
+              {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              {isLastModule && isReviewable && shouldSubmitForReview
+                ? 'Enviar parte a revisión'
+                : isLastModule && currentSection === totalSections - 1
+                ? shouldSubmitForReview
+                  ? 'Enviar parte a revisión'
+                  : 'Finalizar'
+                : 'Siguiente'}
+              <ChevronRight className="w-4 h-4 ml-2" />
+            </Button>
+          )}
         </div>
       </div>
     </div>

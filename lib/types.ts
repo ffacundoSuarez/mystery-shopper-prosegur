@@ -1,38 +1,93 @@
 // Tipos para el sistema de formularios Mystery Shopper Prosegur
 
+export type ConditionOperator = 'eq' | 'neq' | 'in' | 'notIn';
+
+/** Una cláusula de condición sobre una respuesta previa */
+export interface ConditionClause {
+  questionId: string;
+  operator?: ConditionOperator;
+  values: string[];
+}
+
+/**
+ * Condición lógica retrocompatible:
+ * - Forma legacy: { questionId, values } (equivale a operator 'in')
+ * - AND: { all: Clause[] }
+ * - OR: { any: Clause[] }
+ */
+export type Condition =
+  | ConditionClause
+  | { all: ConditionClause[] }
+  | { any: ConditionClause[] };
+
 export interface QuestionOption {
   value: string;
   label: string;
+  showIf?: Condition;
+}
+
+/** Fila de una pregunta tipo matriz */
+export interface MatrixRow {
+  id: string;
+  label: string;
+  showIf?: Condition;
 }
 
 export interface Question {
   id: string;
   text: string;
-  type: 'single' | 'multiple' | 'text' | 'longtext' | 'date' | 'time' | 'number' | 'scale' | 'evidence';
+  type:
+    | 'single'
+    | 'multiple'
+    | 'text'
+    | 'longtext'
+    | 'date'
+    | 'time'
+    | 'number'
+    | 'scale'
+    | 'evidence'
+    | 'matrix'
+    | 'info';
   options?: QuestionOption[];
   required?: boolean;
   hint?: string;
-  showIf?: {
-    questionId: string;
-    values: string[];
-  };
+  showIf?: Condition;
+  /** Descalifica toda la encuesta si se cumple (ej. región "Otro") */
+  terminateIf?: Condition;
+  /** Baraja opciones determinísticamente por shopper */
+  rotate?: boolean;
   scaleMin?: number;
   scaleMax?: number;
   scaleMinLabel?: string;
   scaleMaxLabel?: string;
+  matrixRows?: MatrixRow[];
+  matrixColumns?: QuestionOption[];
 }
 
+/** Módulo visual dentro de una parte (fluye uno tras otro) */
+export interface SurveyModule {
+  id: string;
+  title: string;
+  description?: string;
+  showIf?: Condition;
+  questions: Question[];
+}
+
+/**
+ * Parte del cuestionario (= unidad de etapa/revisión).
+ * `general` usa questions planas; las partes usan modules.
+ */
 export interface SurveySection {
   id: string;
   title: string;
   description?: string;
-  questions: Question[];
+  /** Sección plana (solo general) */
+  questions?: Question[];
+  /** Partes con módulos internos */
+  modules?: SurveyModule[];
 }
 
-// Estado global legacy (compatibilidad)
 export type ResponseStatus = 'borrador' | 'en_revision' | 'publicado' | 'rechazado';
-
-// Estado por etapa/sección revisable
 export type StageStatus = 'pendiente' | 'en_revision' | 'aprobada' | 'rechazada';
 
 export interface StageInfo {
@@ -40,7 +95,6 @@ export interface StageInfo {
   submittedAt?: string;
   reviewedAt?: string;
   reviewedBy?: string;
-  /** Motivo del rechazo (visible para el postulante) */
   rejectionMessage?: string;
 }
 
@@ -52,7 +106,10 @@ export interface EvidenceFile {
   type: string;
 }
 
-export type AnswerValue = string | string[] | EvidenceFile[];
+/** Respuesta de matriz: filaId -> valor de columna */
+export type MatrixAnswer = Record<string, string>;
+
+export type AnswerValue = string | string[] | EvidenceFile[] | MatrixAnswer;
 
 export interface SurveyResponse {
   id: string;
@@ -75,7 +132,6 @@ export interface SurveyResponse {
   updatedAt: string;
 }
 
-// Item en cola de revisión (una etapa pendiente)
 export interface PendingReviewItem {
   id: string;
   code?: string;
@@ -91,7 +147,6 @@ export interface PendingReviewItem {
   updatedAt: string;
 }
 
-// Resultado público para vista del cliente
 export interface PublicResult {
   id: string;
   code?: string;
@@ -116,6 +171,7 @@ export interface PostulanteSummary {
   empresa?: string;
   ciudad?: string;
   stages?: StagesMap;
+  answers?: Record<string, AnswerValue>;
   status?: ResponseStatus;
   createdAt: string;
   updatedAt?: string;

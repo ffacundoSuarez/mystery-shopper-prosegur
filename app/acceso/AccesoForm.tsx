@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { setOpsPasscode } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
@@ -10,23 +10,42 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Loader2, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 
+/** Lee el valor del input (estado React + DOM por si el móvil no disparó onChange) */
+function readPasscode(state: string): string {
+  const fromDom =
+    typeof document !== 'undefined'
+      ? (document.getElementById('passcode') as HTMLInputElement | null)?.value ?? ''
+      : '';
+  return (state || fromDom).trim();
+}
+
 export default function AccesoForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get('redirect') || '/dashboard';
   const [passcode, setPasscode] = useState('');
+  const [canSubmit, setCanSubmit] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const syncPasscode = useCallback((raw: string) => {
+    setPasscode(raw);
+    setCanSubmit(raw.trim().length > 0);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!passcode.trim()) return;
+    const value = readPasscode(passcode);
+    if (!value) {
+      toast.error('Ingresá la clave de operaciones');
+      return;
+    }
 
     setLoading(true);
     try {
       const res = await fetch('/api/acceso', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ passcode: passcode.trim() }),
+        body: JSON.stringify({ passcode: value }),
       });
 
       if (!res.ok) {
@@ -35,7 +54,7 @@ export default function AccesoForm() {
         return;
       }
 
-      setOpsPasscode(passcode.trim());
+      setOpsPasscode(value);
       router.push(redirect);
     } catch {
       toast.error('Error al validar el acceso');
@@ -62,14 +81,25 @@ export default function AccesoForm() {
               <Label htmlFor="passcode">Clave de acceso</Label>
               <Input
                 id="passcode"
-                type="password"
+                name="passcode"
+                type="text"
+                inputMode="text"
+                autoComplete="off"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
                 placeholder="Clave de operaciones"
                 value={passcode}
-                onChange={(e) => setPasscode(e.target.value)}
-                autoFocus
+                onChange={(e) => syncPasscode(e.target.value)}
+                onInput={(e) => syncPasscode(e.currentTarget.value)}
+                className="text-base"
               />
             </div>
-            <Button type="submit" className="w-full" disabled={loading || !passcode.trim()}>
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={loading || !canSubmit}
+            >
               {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Ingresar
             </Button>
