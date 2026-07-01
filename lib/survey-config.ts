@@ -1,89 +1,76 @@
-import { SurveySection } from './types';
+import { SurveyModule, SurveySection } from './types';
+import { getVisibleModules } from './survey-logic';
+import { parte1 } from './survey-config/parte-1';
+import { parte2 } from './survey-config/parte-2';
+import { parte3 } from './survey-config/parte-3';
 
-const SI_NO = [
-  { value: 'si', label: 'Sí' },
-  { value: 'no', label: 'No' },
-];
+/** Secciones del cuestionario en orden de navegación */
+export const surveySections: SurveySection[] = [parte1, parte2, parte3];
 
-// Configuración base de la encuesta Mystery Shopper Prosegur.
-// Reemplazar/ampliar secciones cuando se tenga la encuesta definitiva.
-// Soporta saltos lógicos con showIf en cada pregunta.
-export const surveySections: SurveySection[] = [
-  {
-    id: 'general',
-    title: 'Información General',
-    description: 'Datos generales del mystery shopper y del proceso',
-    questions: [
-      { id: 'nombre-apellido', text: 'Nombre y Apellido', type: 'text', required: true },
-      { id: 'empresa', text: 'Empresa / Sucursal', type: 'text', required: true },
-      { id: 'ciudad', text: 'Ciudad', type: 'text', required: true },
-      { id: 'fecha-inicio', text: 'Fecha de inicio', type: 'date' },
-      {
-        id: 'ultima-etapa',
-        text: 'Última etapa alcanzada',
-        type: 'single',
-        options: [
-          { value: 'ejemplo', label: 'Sección de ejemplo' },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'ejemplo',
-    title: 'Sección de Ejemplo',
-    description: 'Sección de prueba para validar el flujo. Reemplazar con la encuesta real de Prosegur.',
-    questions: [
-      {
-        id: 'ej-tuvo-incidente',
-        text: '¿Hubo algún incidente durante la visita?',
-        type: 'single',
-        options: SI_NO,
-      },
-      {
-        id: 'ej-detalle-incidente',
-        text: 'Describir el incidente',
-        type: 'longtext',
-        hint: 'Solo si respondió Sí arriba',
-        showIf: { questionId: 'ej-tuvo-incidente', values: ['si'] },
-      },
-      {
-        id: 'ej-satisfaccion',
-        text: 'Nivel de satisfacción general',
-        type: 'scale',
-        scaleMin: 1,
-        scaleMax: 5,
-        scaleMinLabel: 'Muy bajo',
-        scaleMaxLabel: 'Muy alto',
-      },
-      {
-        id: 'evidence-ejemplo',
-        text: 'Evidencia de la visita',
-        type: 'evidence',
-        hint: 'Fotos, capturas o documentos de respaldo.',
-      },
-    ],
-  },
-];
+export const REVIEWABLE_SECTIONS = surveySections.map((s) => s.id);
 
 export const HEADER_FIELDS = {
   'nombre-apellido': 'nombreApellido',
-  'empresa': 'empresa',
-  'ciudad': 'ciudad',
+  empresa: 'empresa',
+  ciudad: 'ciudad',
   'fecha-inicio': 'fechaInicio',
   'fecha-fin': 'fechaFin',
   'ultima-etapa': 'ultimaEtapa',
 } as const;
 
-export const REVIEWABLE_SECTIONS = surveySections
-  .filter((s) => s.id !== 'general')
-  .map((s) => s.id);
+/** Convierte sección plana en un módulo implícito */
+export function getSectionModules(
+  section: SurveySection,
+  answers: Record<string, import('./types').AnswerValue> = {}
+): SurveyModule[] {
+  if (section.modules) {
+    return getVisibleModules(section, answers);
+  }
+  if (section.questions) {
+    return [
+      {
+        id: section.id,
+        title: section.title,
+        description: section.description,
+        questions: section.questions,
+      },
+    ];
+  }
+  return [];
+}
+
+/** Todos los módulos visibles de una sección (sin filtrar) */
+export function getAllSectionModules(section: SurveySection): SurveyModule[] {
+  if (section.modules) return section.modules;
+  if (section.questions) {
+    return [
+      {
+        id: section.id,
+        title: section.title,
+        description: section.description,
+        questions: section.questions,
+      },
+    ];
+  }
+  return [];
+}
 
 export function getSectionTitle(sectionId: string): string {
   return surveySections.find((s) => s.id === sectionId)?.title ?? sectionId;
 }
 
+export function getModuleTitle(sectionId: string, moduleId: string): string {
+  const section = surveySections.find((s) => s.id === sectionId);
+  const mod = section ? getAllSectionModules(section).find((m) => m.id === moduleId) : undefined;
+  return mod?.title ?? moduleId;
+}
+
 export function getSectionIndex(sectionId: string): number {
   return surveySections.findIndex((s) => s.id === sectionId);
+}
+
+export function isReviewableSection(sectionId: string): boolean {
+  return REVIEWABLE_SECTIONS.includes(sectionId);
 }
 
 export function getNextReviewableSection(currentSectionId: string): string | null {
@@ -121,4 +108,31 @@ export function getMaxApprovedStage(stages: Record<string, { status?: string }>)
     }
   }
   return maxStage;
+}
+
+/** Índice del siguiente módulo visible dentro de una sección, o -1 si no hay */
+export function getNextVisibleModuleIndex(
+  section: SurveySection,
+  currentModuleIndex: number,
+  answers: Record<string, import('./types').AnswerValue>
+): number {
+  const modules = getSectionModules(section, answers);
+  const allModules = getAllSectionModules(section);
+  const currentModule = allModules[currentModuleIndex];
+  if (!currentModule) return -1;
+  const visibleIdx = modules.findIndex((m) => m.id === currentModule.id);
+  if (visibleIdx < 0 || visibleIdx >= modules.length - 1) return -1;
+  const nextVisible = modules[visibleIdx + 1];
+  return allModules.findIndex((m) => m.id === nextVisible.id);
+}
+
+/** ¿Es el último módulo visible de la sección? (índice sobre módulos visibles) */
+export function isLastVisibleModule(
+  section: SurveySection,
+  visibleModuleIndex: number,
+  answers: Record<string, import('./types').AnswerValue>
+): boolean {
+  const modules = getSectionModules(section, answers);
+  if (modules.length === 0) return true;
+  return visibleModuleIndex >= modules.length - 1;
 }

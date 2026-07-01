@@ -64,10 +64,11 @@ create trigger prosegur_responses_set_updated_at
   for each row execute function public.prosegur_set_updated_at();
 
 -- Passcode Prosegur (clave distinta a passcode_hash del Mystery Candidate)
+-- pgcrypto vive en el schema "extensions" en Supabase, por eso se califica.
 insert into public.app_config (key, value)
 values (
   'prosegur_passcode_hash',
-  crypt('operaciones123', gen_salt('bf'))
+  extensions.crypt('operaciones123', extensions.gen_salt('bf'))
 )
 on conflict (key) do nothing;
 
@@ -100,7 +101,7 @@ create or replace function public.prosegur_validate_passcode(p_passcode text)
 returns boolean
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_hash text;
@@ -119,7 +120,7 @@ returns text[]
 language sql
 immutable
 as $$
-  select array['ejemplo']::text[];
+  select array['parte-1', 'parte-2', 'parte-3']::text[];
 $$;
 
 create or replace function public.prosegur_max_approved_stage(p_stages jsonb)
@@ -377,6 +378,7 @@ begin
         'empresa', empresa,
         'ciudad', ciudad,
         'stages', coalesce(stages, '{}'::jsonb),
+        'answers', coalesce(answers, '{}'::jsonb),
         'status', status,
         'createdAt', created_at,
         'updatedAt', updated_at
@@ -613,7 +615,7 @@ create or replace function public.prosegur_admin_update_passcode(
 returns boolean
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   if not public.prosegur_validate_passcode(p_current_passcode) then

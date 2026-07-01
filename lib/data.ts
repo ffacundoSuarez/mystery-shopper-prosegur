@@ -81,6 +81,7 @@ function parsePostulante(raw: Record<string, unknown>): PostulanteSummary {
     empresa: raw.empresa as string | undefined,
     ciudad: raw.ciudad as string | undefined,
     stages: raw.stages as StagesMap | undefined,
+    answers: (raw.answers as Record<string, AnswerValue>) || undefined,
     status: raw.status as ResponseStatus | undefined,
     createdAt: String(raw.createdAt),
     updatedAt: raw.updatedAt as string | undefined,
@@ -125,7 +126,7 @@ export async function finalizeProcessByToken(
 ): Promise<SurveyResponse> {
   return saveStageByToken(
     accessToken,
-    'general',
+    'parte-1',
     {
       'fecha-fin': fechaFin,
       'proceso-finalizado': 'si',

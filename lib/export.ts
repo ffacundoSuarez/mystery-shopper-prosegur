@@ -1,5 +1,10 @@
 import { surveySections, getSectionTitle } from './survey-config';
-import { getAnswerLabel, isEvidence } from './format';
+import { getAnswerLabel, isEvidence, formatQuestionText } from './format';
+import {
+  getAllQuestions,
+  getAllQuestionsFromSection,
+  isQuestionVisible,
+} from './survey-logic';
 import { PublicResult, SurveyResponse } from './types';
 
 function csvCell(value: string): string {
@@ -20,7 +25,7 @@ function downloadBlob(blob: Blob, filename: string) {
 type ExportRow = SurveyResponse | PublicResult;
 
 function buildExportRows(responses: ExportRow[]) {
-  const questions = surveySections.flatMap((s) => s.questions);
+  const questions = getAllQuestions(surveySections);
   const headers = [
     'ID',
     'Código',
@@ -28,7 +33,7 @@ function buildExportRows(responses: ExportRow[]) {
     'Empresa',
     'Ciudad',
     'Etapa alcanzada',
-    ...questions.map((q) => q.text),
+    ...questions.map((q) => formatQuestionText(q.text)),
   ];
 
   const rows = responses.map((r) => {
@@ -48,6 +53,10 @@ function buildExportRows(responses: ExportRow[]) {
     ];
 
     for (const q of questions) {
+      if (!isQuestionVisible(q, r.answers)) {
+        cells.push('');
+        continue;
+      }
       const value = r.answers[q.id];
       if (value === undefined) {
         cells.push('');
@@ -110,3 +119,6 @@ export async function exportResponsesToPdf(
 
   doc.save(filename);
 }
+
+// Re-export for consumers that need section question flattening
+export { getAllQuestionsFromSection };
