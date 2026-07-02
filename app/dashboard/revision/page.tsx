@@ -96,7 +96,7 @@ export default function RevisionPage() {
   const handleReview = async (
     sectionId: string,
     action: 'aprobar' | 'rechazar',
-    rejectionMessage?: string
+    reviewFlags?: import('@/lib/types').ReviewFlagsMap
   ) => {
     if (!selected) return;
     setActionLoading(sectionId);
@@ -106,7 +106,8 @@ export default function RevisionPage() {
         sectionId,
         action,
         'Ops',
-        rejectionMessage
+        undefined,
+        reviewFlags
       );
       setSelected(updated);
 
@@ -119,7 +120,7 @@ export default function RevisionPage() {
       toast.success(
         action === 'aprobar'
           ? `Etapa "${getSectionTitle(sectionId)}" aprobada`
-          : `Etapa "${getSectionTitle(sectionId)}" rechazada`
+          : `Correcciones enviadas en "${getSectionTitle(sectionId)}"`
       );
 
       if (!stillPending) {
@@ -311,8 +312,8 @@ export default function RevisionPage() {
               unlockLoading={unlockLoading}
               onUnlockSurvey={handleUnlockSurvey}
               onApproveStage={(sectionId) => handleReview(sectionId, 'aprobar')}
-              onRejectStage={(sectionId, message) =>
-                handleReview(sectionId, 'rechazar', message)
+              onSendCorrections={(sectionId, flags) =>
+                handleReview(sectionId, 'rechazar', flags)
               }
             />
           )}

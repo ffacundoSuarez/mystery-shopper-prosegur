@@ -59,6 +59,13 @@ export function getSectionTitle(sectionId: string): string {
   return surveySections.find((s) => s.id === sectionId)?.title ?? sectionId;
 }
 
+/** Título de sección según idioma */
+export function getLocalizedSectionTitle(sectionId: string, lang: import('./types').Lang): string {
+  const section = surveySections.find((s) => s.id === sectionId);
+  if (!section) return sectionId;
+  return lang === 'pt' && section.titlePt ? section.titlePt : section.title;
+}
+
 export function getModuleTitle(sectionId: string, moduleId: string): string {
   const section = surveySections.find((s) => s.id === sectionId);
   const mod = section ? getAllSectionModules(section).find((m) => m.id === moduleId) : undefined;
@@ -135,4 +142,38 @@ export function isLastVisibleModule(
   const modules = getSectionModules(section, answers);
   if (modules.length === 0) return true;
   return visibleModuleIndex >= modules.length - 1;
+}
+
+/** Ubica una pregunta en el cuestionario (sección + módulo visibles) */
+export function locateQuestion(
+  questionId: string,
+  answers: Record<string, import('./types').AnswerValue> = {}
+): { sectionIndex: number; moduleIndex: number } | null {
+  for (let si = 0; si < surveySections.length; si++) {
+    const section = surveySections[si];
+    const modules = getSectionModules(section, answers);
+    for (let mi = 0; mi < modules.length; mi++) {
+      if (modules[mi].questions.some((q) => q.id === questionId)) {
+        return { sectionIndex: si, moduleIndex: mi };
+      }
+    }
+  }
+  return null;
+}
+
+/** Lista ordenada de IDs de preguntas marcadas a revisar */
+export function getOrderedReviewQuestionIds(
+  reviewFlags: Record<string, { note: string; sectionId: string }> = {}
+): string[] {
+  const flagged = new Set(Object.keys(reviewFlags));
+  const ordered: string[] = [];
+  for (const section of surveySections) {
+    const modules = getAllSectionModules(section);
+    for (const mod of modules) {
+      for (const q of mod.questions) {
+        if (flagged.has(q.id)) ordered.push(q.id);
+      }
+    }
+  }
+  return ordered;
 }

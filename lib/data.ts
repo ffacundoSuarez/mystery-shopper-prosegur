@@ -4,10 +4,12 @@ import { getOpsPasscode, requireOpsPasscode } from './auth';
 import {
   AnswerValue,
   EvidenceFile,
+  Lang,
   PendingReviewItem,
   PostulanteSummary,
   PublicResult,
   ResponseStatus,
+  ReviewFlagsMap,
   StagesMap,
   SurveyResponse,
 } from './types';
@@ -19,6 +21,7 @@ function parseResponse(raw: Record<string, unknown>): SurveyResponse {
     id: String(raw.id),
     code: raw.code as string | undefined,
     accessToken: raw.accessToken as string | undefined,
+    idioma: (raw.idioma as Lang) || 'es',
     nombre: raw.nombre as string | undefined,
     apellido: raw.apellido as string | undefined,
     nombreApellido: raw.nombreApellido as string | undefined,
@@ -29,6 +32,7 @@ function parseResponse(raw: Record<string, unknown>): SurveyResponse {
     ultimaEtapa: raw.ultimaEtapa as string | undefined,
     status: (raw.status as ResponseStatus) || 'borrador',
     stages: (raw.stages as StagesMap) || {},
+    reviewFlags: (raw.reviewFlags as ReviewFlagsMap) || {},
     answers: (raw.answers as Record<string, AnswerValue>) || {},
     reviewedAt: raw.reviewedAt as string | undefined,
     reviewedBy: raw.reviewedBy as string | undefined,
@@ -42,6 +46,7 @@ function parsePendingReview(raw: Record<string, unknown>): PendingReviewItem {
     id: String(raw.id),
     code: raw.code as string | undefined,
     accessToken: raw.accessToken as string | undefined,
+    idioma: (raw.idioma as Lang) || 'es',
     nombre: raw.nombre as string | undefined,
     apellido: raw.apellido as string | undefined,
     nombreApellido: raw.nombreApellido as string | undefined,
@@ -49,6 +54,7 @@ function parsePendingReview(raw: Record<string, unknown>): PendingReviewItem {
     ciudad: raw.ciudad as string | undefined,
     sectionId: String(raw.sectionId),
     stages: (raw.stages as StagesMap) || {},
+    reviewFlags: (raw.reviewFlags as ReviewFlagsMap) || {},
     answers: (raw.answers as Record<string, AnswerValue>) || {},
     updatedAt: String(raw.updatedAt),
   };
@@ -75,12 +81,14 @@ function parsePostulante(raw: Record<string, unknown>): PostulanteSummary {
     id: String(raw.id),
     code: raw.code as string | undefined,
     accessToken: raw.accessToken as string | undefined,
+    idioma: (raw.idioma as Lang) || 'es',
     nombre: raw.nombre as string | undefined,
     apellido: raw.apellido as string | undefined,
     nombreApellido: raw.nombreApellido as string | undefined,
     empresa: raw.empresa as string | undefined,
     ciudad: raw.ciudad as string | undefined,
     stages: raw.stages as StagesMap | undefined,
+    reviewFlags: (raw.reviewFlags as ReviewFlagsMap) || undefined,
     answers: (raw.answers as Record<string, AnswerValue>) || undefined,
     status: raw.status as ResponseStatus | undefined,
     createdAt: String(raw.createdAt),
@@ -119,22 +127,6 @@ export async function saveStageByToken(
   return parseResponse(data as Record<string, unknown>);
 }
 
-/** Marca el proceso como finalizado y guarda la fecha de término */
-export async function finalizeProcessByToken(
-  accessToken: string,
-  fechaFin: string
-): Promise<SurveyResponse> {
-  return saveStageByToken(
-    accessToken,
-    'parte-1',
-    {
-      'fecha-fin': fechaFin,
-      'proceso-finalizado': 'si',
-    },
-    false
-  );
-}
-
 // --- Vista pública --------------------------------------------------------
 
 export async function getPublicResults(): Promise<PublicResult[]> {
@@ -147,12 +139,14 @@ export async function getPublicResults(): Promise<PublicResult[]> {
 
 export async function adminCreatePostulante(
   nombre: string,
-  apellido: string
+  apellido: string,
+  idioma: Lang = 'es'
 ): Promise<PostulanteSummary> {
   const { data, error } = await supabase.rpc('prosegur_admin_create_postulante', {
     p_passcode: requireOpsPasscode(),
     p_nombre: nombre,
     p_apellido: apellido,
+    p_idioma: idioma,
   });
   if (error) throw error;
   return parsePostulante(data as Record<string, unknown>);
@@ -187,7 +181,8 @@ export async function adminReviewStage(
   sectionId: string,
   action: 'aprobar' | 'rechazar',
   reviewedBy = 'Ops',
-  rejectionMessage?: string
+  rejectionMessage?: string,
+  reviewFlags?: ReviewFlagsMap
 ): Promise<SurveyResponse> {
   const { data, error } = await supabase.rpc('prosegur_admin_review_stage', {
     p_passcode: requireOpsPasscode(),
@@ -196,6 +191,7 @@ export async function adminReviewStage(
     p_action: action,
     p_reviewed_by: reviewedBy,
     p_rejection_message: rejectionMessage?.trim() || null,
+    p_review_flags: reviewFlags && Object.keys(reviewFlags).length > 0 ? reviewFlags : null,
   });
   if (error) throw error;
   return parseResponse(data as Record<string, unknown>);

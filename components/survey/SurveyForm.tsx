@@ -9,6 +9,9 @@ import {
   getSectionModules,
   isLastVisibleModule,
   isReviewableSection,
+  locateQuestion,
+  getOrderedReviewQuestionIds,
+  getLocalizedSectionTitle,
 } from '@/lib/survey-config';
 import {
   getDisqualification,
@@ -19,9 +22,10 @@ import {
   isModuleComplete,
   partHasAnswers,
 } from '@/lib/survey-logic';
-import { formatQuestionText } from '@/lib/format';
-import { AnswerValue, EvidenceFile, MatrixAnswer, Question, StageStatus, StagesMap, SurveyModule } from '@/lib/types';
-import { getResponseByToken, saveStageByToken, uploadEvidence, finalizeProcessByToken } from '@/lib/data';
+import { formatQuestionText, pick } from '@/lib/format';
+import { t } from '@/lib/survey-i18n';
+import { AnswerValue, EvidenceFile, Lang, MatrixAnswer, Question, ReviewFlagsMap, StageStatus, StagesMap, SurveyModule } from '@/lib/types';
+import { getResponseByToken, saveStageByToken, uploadEvidence } from '@/lib/data';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -29,14 +33,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import {
   ChevronLeft,
   ChevronRight,
@@ -54,11 +50,11 @@ import {
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
-const STAGE_STATUS_TEXT: Record<StageStatus, string> = {
-  pendiente: 'pendiente',
-  en_revision: 'en revisión',
-  aprobada: 'aprobada',
-  rechazada: 'rechazada',
+const STAGE_STATUS_TEXT: Record<StageStatus, Record<Lang, string>> = {
+  pendiente: { es: 'pendiente', pt: 'pendente' },
+  en_revision: { es: 'en revisión', pt: 'em revisão' },
+  aprobada: { es: 'aprobada', pt: 'aprovada' },
+  rechazada: { es: 'rechazada', pt: 'rejeitada' },
 };
 
 function sectionAnswersEqual(
@@ -67,13 +63,6 @@ function sectionAnswersEqual(
 ): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
-
-function isParte1Completed(stages: StagesMap): boolean {
-  const status = stages['parte-1']?.status;
-  return status === 'en_revision' || status === 'aprobada' || status === 'rechazada';
-}
-
-type FinalizeDialogStep = 'ask' | 'date';
 
 export function SurveyForm({ accessToken }: { accessToken: string }) {
   const [currentSection, setCurrentSection] = useState(0);
@@ -88,16 +77,23 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
   const [uploading, setUploading] = useState<Record<string, boolean>>({});
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
   const [sectionBaseline, setSectionBaseline] = useState<Record<string, AnswerValue>>({});
-  const [finalizeDialogOpen, setFinalizeDialogOpen] = useState(false);
-  const [finalizeDialogStep, setFinalizeDialogStep] = useState<FinalizeDialogStep>('ask');
-  const [finalizeFecha, setFinalizeFecha] = useState('');
-  const [finalizing, setFinalizing] = useState(false);
+  const [lang, setLang] = useState<Lang>('es');
+  const [reviewFlags, setReviewFlags] = useState<ReviewFlagsMap>({});
+  const [reviewNavIndex, setReviewNavIndex] = useState(0);
+  const [correctionMode, setCorrectionMode] = useState(false);
 
   const isFinalized = answers['proceso-finalizado'] === 'si';
   const section = surveySections[currentSection];
   const sectionId = section.id;
   const isReviewable = isReviewableSection(sectionId);
   const currentStageStatus = stages[sectionId]?.status as StageStatus | undefined;
+
+  const orderedReviewIds = useMemo(
+    () => getOrderedReviewQuestionIds(reviewFlags),
+    [reviewFlags]
+  );
+
+  const hasActiveCorrections = orderedReviewIds.length > 0;
 
   const visibleModules = useMemo(
     () => getSectionModules(section, answers),
@@ -117,8 +113,8 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
 
   const nextSectionTitle = useMemo(() => {
     const nextId = getNextReviewableSection(sectionId);
-    return nextId ? getSectionTitle(nextId) : null;
-  }, [sectionId]);
+    return nextId ? getLocalizedSectionTitle(nextId, lang) : null;
+  }, [sectionId, lang]);
 
   const nextSectionIndex = useMemo(() => {
     const nextId = getNextReviewableSection(sectionId);
@@ -155,6 +151,13 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
   const showStatusBanner =
     isReviewable && currentStageStatus && currentStageStatus !== 'pendiente';
 
+  /** Viendo respuestas de una parte ya enviada/aprobada (sin modo corrección) */
+  const isBrowsingApprovedSection =
+    !showStageGate &&
+    isReviewable &&
+    (currentStageStatus === 'aprobada' || currentStageStatus === 'en_revision') &&
+    !correctionMode;
+
   useEffect(() => {
     let active = true;
     (async () => {
@@ -163,16 +166,32 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
         if (!active) return;
         if (existing) {
           const ans = existing.answers || {};
+          const flags = existing.reviewFlags || {};
           setAnswers(ans);
           setStages(existing.stages || {});
+          setReviewFlags(flags);
           setCode(existing.code || '');
-          setCurrentSection(getResumeSectionIndex(existing.stages || {}));
+          setLang(existing.idioma || 'es');
+
+          const reviewIds = getOrderedReviewQuestionIds(flags);
+          if (reviewIds.length > 0) {
+            const loc = locateQuestion(reviewIds[0], ans);
+            if (loc) {
+              setCurrentSection(loc.sectionIndex);
+              setCurrentModuleIndex(loc.moduleIndex);
+              setCorrectionMode(true);
+              setShowStageGate(false);
+            }
+          } else {
+            setCurrentSection(getResumeSectionIndex(existing.stages || {}));
+          }
+
           if (ans['encuesta-cerrada'] === 'si') {
             setSurveyThankYou(true);
           }
         }
       } catch {
-        toast.error('No se pudo cargar el formulario');
+        toast.error(t('loadError', 'es'));
       } finally {
         if (active) setLoading(false);
       }
@@ -184,20 +203,15 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
 
   useEffect(() => {
     if (loading) return;
-    if (answers['proceso-finalizado'] === 'si') return;
-    if (!isParte1Completed(stages)) return;
-    setFinalizeDialogOpen(true);
-    setFinalizeDialogStep('ask');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading]);
-
-  useEffect(() => {
-    if (loading) return;
     setCurrentModuleIndex(0);
     setSectionBaseline(getSectionAnswers(sectionId, answers));
     if (isReviewable) {
       const status = stages[sectionId]?.status;
-      setShowStageGate(status === 'aprobada' || status === 'en_revision');
+      if (correctionMode && hasActiveCorrections) {
+        setShowStageGate(false);
+      } else {
+        setShowStageGate(status === 'aprobada' || status === 'en_revision');
+      }
     } else {
       setShowStageGate(false);
     }
@@ -238,9 +252,9 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
       }
       const current = (answers[questionId] as EvidenceFile[]) || [];
       updateAnswer(questionId, [...current, ...uploaded]);
-      toast.success('Archivo enviado correctamente');
+      toast.success(t('fileSent', lang));
     } catch {
-      toast.error('Error al enviar el archivo');
+      toast.error(t('fileError', lang));
     } finally {
       setUploading((p) => ({ ...p, [questionId]: false }));
       setUploadProgress((p) => ({ ...p, [questionId]: 0 }));
@@ -281,17 +295,21 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
       );
       setStages(updated.stages || {});
       setAnswers(updated.answers || {});
+      setReviewFlags(updated.reviewFlags || {});
       setSectionBaseline(getSectionAnswers(sectionId, updated.answers || {}));
 
       if (submitReview && isReviewable) {
-        toast.success(`"${section.title}" enviada para revisión`);
+        toast.success(`"${pick(section.title, section.titlePt, lang)}" ${t('sentReview', lang)}`);
+        if (Object.keys(updated.reviewFlags || {}).length === 0) {
+          setCorrectionMode(false);
+        }
         setShowStageGate(true);
         return;
       }
 
       if (advance) advanceToNextSection();
     } catch {
-      toast.error('No se pudo guardar');
+      toast.error(t('saveError', lang));
     } finally {
       setSaving(false);
     }
@@ -313,7 +331,7 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
       setAnswers(updated.answers || {});
       setSurveyThankYou(true);
     } catch {
-      toast.error('No se pudo guardar');
+      toast.error(t('saveError', lang));
     } finally {
       setSaving(false);
     }
@@ -345,7 +363,7 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
         setSectionBaseline(getSectionAnswers(sectionId, updated.answers || {}));
         advanceToNextModule();
       } catch {
-        toast.error('No se pudo guardar');
+        toast.error(t('saveError', lang));
       } finally {
         setSaving(false);
       }
@@ -354,6 +372,13 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
 
     if (shouldSubmitForReview) {
       await saveCurrentSection(true, true);
+      return;
+    }
+
+    // En modo "ver respuestas", Siguiente no avanza a la siguiente parte
+    if (isBrowsingApprovedSection) {
+      setShowStageGate(true);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
@@ -381,31 +406,27 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
 
   const openResponsesForEdit = () => setShowStageGate(false);
 
-  const handleFinalizeNo = () => {
-    setFinalizeDialogOpen(false);
-    setFinalizeDialogStep('ask');
-    setFinalizeFecha('');
+  /** Solo permite ir a secciones ya iniciadas; la siguiente parte solo vía el banner */
+  const canNavigateToSection = (index: number) => {
+    if (index === currentSection) return true;
+    const targetId = surveySections[index].id;
+    const targetStatus = stages[targetId]?.status;
+    if (targetStatus && targetStatus !== 'pendiente') return true;
+    if (index > currentSection) return false;
+    return true;
   };
 
-  const handleFinalizeYes = () => setFinalizeDialogStep('date');
-
-  const handleFinalizeSubmit = async () => {
-    if (!finalizeFecha) {
-      toast.error('Indique la fecha de término');
-      return;
-    }
-    setFinalizing(true);
-    try {
-      const updated = await finalizeProcessByToken(accessToken, finalizeFecha);
-      setAnswers(updated.answers || {});
-      setStages(updated.stages || {});
-      setFinalizeDialogOpen(false);
-      toast.success('Proceso finalizado');
-    } catch {
-      toast.error('No se pudo finalizar');
-    } finally {
-      setFinalizing(false);
-    }
+  const goToReviewQuestion = (index: number) => {
+    const qId = orderedReviewIds[index];
+    if (!qId) return;
+    const loc = locateQuestion(qId, answers);
+    if (!loc) return;
+    setReviewNavIndex(index);
+    setCurrentSection(loc.sectionIndex);
+    setCurrentModuleIndex(loc.moduleIndex);
+    setCorrectionMode(true);
+    setShowStageGate(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const renderMatrix = (question: Question) => {
@@ -431,7 +452,7 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
               <th className="text-left p-2 border-b" />
               {cols.map((col) => (
                 <th key={col.value} className="text-center p-2 border-b font-medium">
-                  {col.label}
+                  {pick(col.label, col.labelPt, lang)}
                 </th>
               ))}
             </tr>
@@ -439,7 +460,9 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
           <tbody>
             {rows.map((row) => (
               <tr key={row.id} className="border-b last:border-0">
-                <td className="p-2 align-top text-muted-foreground">{row.label}</td>
+                <td className="p-2 align-top text-muted-foreground">
+                  {pick(row.label, row.labelPt, lang)}
+                </td>
                 {cols.map((col) => (
                   <td key={col.value} className="p-2 text-center">
                     <input
@@ -462,20 +485,44 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
 
   const renderQuestion = (question: Question) => {
     const options = getOrderedOptions(question, answers, accessToken);
-    const displayText = formatQuestionText(question.text);
+    const displayText = formatQuestionText(pick(question.text, question.textPt, lang));
+    const reviewNote = reviewFlags[question.id]?.note;
+    const hasReviewFlag = Boolean(reviewNote);
 
     return (
-      <div key={question.id} className="space-y-3">
+      <div
+        key={question.id}
+        className={cn(
+          'space-y-3',
+          hasReviewFlag &&
+            'rounded-xl border-2 border-amber-300 bg-amber-50/40 p-4 shadow-sm'
+        )}
+      >
         <Label className="text-base font-medium leading-relaxed">
           {displayText}
           {question.required && <span className="text-red-500 ml-1">*</span>}
         </Label>
+
+        {reviewNote && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
+            <p className="font-medium text-blue-900 mb-1 flex items-center gap-1.5">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              {t('reviewNote', lang)}
+            </p>
+            <p className="text-blue-900/90 whitespace-pre-wrap">{reviewNote}</p>
+          </div>
+        )}
+
         {question.hint && (
-          <p className="text-sm text-muted-foreground">{question.hint}</p>
+          <p className="text-sm text-muted-foreground">
+            {pick(question.hint, question.hintPt, lang)}
+          </p>
         )}
 
         {question.type === 'info' && question.hint && (
-          <p className="text-sm bg-muted/50 p-3 rounded-lg">{question.hint}</p>
+          <p className="text-sm bg-muted/50 p-3 rounded-lg">
+            {pick(question.hint, question.hintPt, lang)}
+          </p>
         )}
 
         {question.type === 'single' && options.length > 0 && (
@@ -496,7 +543,7 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
                       : 'border-border hover:border-primary/50 hover:bg-muted/50'
                   )}
                 >
-                  <span className="flex-1 text-sm">{option.label}</span>
+                  <span className="flex-1 text-sm">{pick(option.label, option.labelPt, lang)}</span>
                 </button>
               );
             })}
@@ -521,7 +568,7 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
                     checked={isChecked}
                     onCheckedChange={() => toggleMultipleChoice(question.id, option.value)}
                   />
-                  <span className="flex-1 text-sm">{option.label}</span>
+                  <span className="flex-1 text-sm">{pick(option.label, option.labelPt, lang)}</span>
                 </label>
               );
             })}
@@ -533,7 +580,7 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
             type="text"
             value={(answers[question.id] as string) || ''}
             onChange={(e) => updateAnswer(question.id, e.target.value)}
-            placeholder="Escriba su respuesta..."
+            placeholder={t('writeAnswer', lang)}
           />
         )}
 
@@ -541,7 +588,7 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
           <Textarea
             value={(answers[question.id] as string) || ''}
             onChange={(e) => updateAnswer(question.id, e.target.value)}
-            placeholder="Escriba su respuesta..."
+            placeholder={t('writeAnswer', lang)}
             className="min-h-[100px]"
           />
         )}
@@ -573,7 +620,7 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
         {question.type === 'scale' && (
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">
-              {question.scaleMinLabel || question.scaleMin}
+              {pick(question.scaleMinLabel || String(question.scaleMin), question.scaleMinLabelPt, lang)}
             </span>
             <div className="flex gap-1 flex-1 justify-center">
               {Array.from(
@@ -604,7 +651,7 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
               )}
             </div>
             <span className="text-xs text-muted-foreground">
-              {question.scaleMaxLabel || question.scaleMax}
+              {pick(question.scaleMaxLabel || String(question.scaleMax), question.scaleMaxLabelPt, lang)}
             </span>
           </div>
         )}
@@ -628,8 +675,8 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
               )}
               <p className="text-sm text-muted-foreground">
                 {uploading[question.id]
-                  ? `Enviando... ${uploadProgress[question.id] || 0}%`
-                  : 'Clic para subir archivos'}
+                  ? `${t('uploading', lang)} ${uploadProgress[question.id] || 0}%`
+                  : t('uploadFiles', lang)}
               </p>
               {uploading[question.id] && uploadProgress[question.id] > 0 && (
                 <Progress value={uploadProgress[question.id]} className="mt-3 h-2" />
@@ -666,62 +713,6 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
     );
   };
 
-  const renderFinalizeDialog = () => (
-    <Dialog
-      open={finalizeDialogOpen}
-      onOpenChange={(open) => {
-        if (!open) handleFinalizeNo();
-        else setFinalizeDialogOpen(true);
-      }}
-    >
-      <DialogContent className="max-w-md">
-        {finalizeDialogStep === 'ask' ? (
-          <>
-            <DialogHeader>
-              <DialogTitle>¿Ya finalizó el proceso?</DialogTitle>
-              <DialogDescription>
-                Si el mystery ya terminó, podemos registrar la fecha de cierre.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter className="flex-col sm:flex-row gap-2">
-              <Button variant="outline" onClick={handleFinalizeNo} className="flex-1">
-                No, continuar
-              </Button>
-              <Button onClick={handleFinalizeYes} className="flex-1">
-                Sí, finalizó
-              </Button>
-            </DialogFooter>
-          </>
-        ) : (
-          <>
-            <DialogHeader>
-              <DialogTitle>Fecha de término</DialogTitle>
-            </DialogHeader>
-            <div className="py-2">
-              <Label htmlFor="finalize-fecha">Fecha</Label>
-              <Input
-                id="finalize-fecha"
-                type="date"
-                value={finalizeFecha}
-                onChange={(e) => setFinalizeFecha(e.target.value)}
-                className="mt-2"
-              />
-            </div>
-            <DialogFooter className="flex-col sm:flex-row gap-2">
-              <Button variant="outline" onClick={() => setFinalizeDialogStep('ask')} disabled={finalizing}>
-                Volver
-              </Button>
-              <Button onClick={handleFinalizeSubmit} disabled={finalizing || !finalizeFecha}>
-                {finalizing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
-                Enviar y cerrar
-              </Button>
-            </DialogFooter>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-
   const renderThankYouScreen = () => (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 flex items-center justify-center p-4">
       <Card className="max-w-md w-full border-0 shadow-lg">
@@ -729,19 +720,9 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
           <div className="mx-auto w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mb-3">
             <CheckCircle2 className="w-6 h-6 text-green-600" />
           </div>
-          <CardTitle className="text-2xl">¡Muchas gracias por responder!</CardTitle>
-          <CardDescription className="text-base">
-            Sus respuestas fueron registradas correctamente. Agradecemos su tiempo y
-            colaboración.
-          </CardDescription>
+          <CardTitle className="text-2xl">{t('thankYouTitle', lang)}</CardTitle>
+          <CardDescription className="text-base">{t('thankYouDesc', lang)}</CardDescription>
         </CardHeader>
-        {code && (
-          <CardContent className="text-center pb-8">
-            <p className="text-sm text-muted-foreground">
-              Código: <span className="font-mono font-medium text-foreground">{code}</span>
-            </p>
-          </CardContent>
-        )}
       </Card>
     </div>
   );
@@ -755,20 +736,18 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
             <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
               <Lock className="w-6 h-6 text-muted-foreground" />
             </div>
-            <CardTitle className="text-2xl">Proceso cerrado</CardTitle>
-            <CardDescription className="text-base">
-              El formulario fue finalizado y no acepta más respuestas.
-            </CardDescription>
+            <CardTitle className="text-2xl">{t('processClosed', lang)}</CardTitle>
+            <CardDescription className="text-base">{t('processClosedDesc', lang)}</CardDescription>
           </CardHeader>
           <CardContent className="text-center space-y-2 pb-8">
             {code && (
               <p className="text-sm text-muted-foreground">
-                Código: <span className="font-mono font-medium text-foreground">{code}</span>
+                {t('code', lang)}: <span className="font-mono font-medium text-foreground">{code}</span>
               </p>
             )}
             {fechaFin && (
               <p className="text-sm">
-                Fecha de término:{' '}
+                {t('endDate', lang)}:{' '}
                 <span className="font-medium">
                   {new Date(fechaFin + 'T12:00:00').toLocaleDateString('es-AR')}
                 </span>
@@ -783,7 +762,6 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
   const renderStageGateBanner = () => {
     if (!showStatusBanner || !currentStageStatus) return null;
 
-    const rejectionMessage = stages[sectionId]?.rejectionMessage;
     const statusStyles = {
       aprobada: 'bg-green-50 text-green-800 border-green-200',
       en_revision: 'bg-amber-50 text-amber-800 border-amber-200',
@@ -798,28 +776,59 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
         <div className={cn('text-sm rounded-lg p-4 border', statusStyles)}>
           <div className="flex items-center gap-2 font-medium mb-1">
             <StatusIcon className="w-4 h-4 shrink-0" />
-            &quot;{section.title}&quot; está {STAGE_STATUS_TEXT[currentStageStatus]}
+            &quot;{pick(section.title, section.titlePt, lang)}&quot; {t('stageIs', lang)}{' '}
+            {STAGE_STATUS_TEXT[currentStageStatus][lang]}
           </div>
-          {currentStageStatus === 'rechazada' && rejectionMessage && (
-            <div className="rounded-md border border-red-300/60 bg-red-100/40 p-3 mb-2">
-              <p className="font-medium text-red-900 mb-1">Motivo del rechazo:</p>
-              <p className="text-red-900/90 whitespace-pre-wrap">{rejectionMessage}</p>
-            </div>
-          )}
           {currentStageStatus !== 'rechazada' && (
-            <p className="text-sm opacity-80">Complete la siguiente parte cuando corresponda.</p>
+            <p className="text-sm opacity-80">{t('completeNext', lang)}</p>
           )}
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
           {nextSectionTitle && currentStageStatus !== 'rechazada' && (
             <Button onClick={goToNextStage} className="flex-1">
-              Ir a: {nextSectionTitle}
+              {t('goTo', lang)}: {nextSectionTitle}
               <ChevronRight className="w-4 h-4 ml-2" />
             </Button>
           )}
           <Button variant="outline" onClick={openResponsesForEdit} className="flex-1">
             <Eye className="w-4 h-4 mr-2" />
-            Ver respuestas
+            {t('viewAnswers', lang)}
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderReviewNavigator = () => {
+    if (!hasActiveCorrections || !correctionMode) return null;
+    const current = reviewNavIndex + 1;
+    const total = orderedReviewIds.length;
+
+    return (
+      <div className="fixed top-20 left-1/2 -translate-x-1/2 z-20 max-w-sm w-[calc(100%-2rem)]">
+        <div className="flex items-center justify-between gap-2 rounded-full border bg-background/95 backdrop-blur shadow-lg px-3 py-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            disabled={reviewNavIndex <= 0}
+            onClick={() => goToReviewQuestion(reviewNavIndex - 1)}
+            title={t('prevCorrection', lang)}
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+          <span className="text-sm font-medium text-center flex-1">
+            {t('correction', lang)} {current}/{total}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            disabled={reviewNavIndex >= total - 1}
+            onClick={() => goToReviewQuestion(reviewNavIndex + 1)}
+            title={t('nextCorrection', lang)}
+          >
+            <ChevronRight className="w-4 h-4" />
           </Button>
         </div>
       </div>
@@ -846,18 +855,18 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/30">
-      {renderFinalizeDialog()}
+      {renderReviewNavigator()}
 
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
         <div className="max-w-2xl mx-auto px-4 py-4 space-y-2">
           <div className="flex items-center justify-between text-sm">
             <span className="font-medium">
               {code ? `${code} · ` : ''}
-              {section.title}
+              {pick(section.title, section.titlePt, lang)}
               {currentModule && visibleModules.length > 1 && (
                 <span className="text-muted-foreground font-normal">
                   {' '}
-                  — {currentModule.title}
+                  — {pick(currentModule.title, currentModule.titlePt, lang)}
                 </span>
               )}
             </span>
@@ -871,9 +880,7 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
 
       {showStatusBanner && !showStageGate && hasSectionEdits && (
         <div className="max-w-2xl mx-auto px-4 pt-2">
-          <p className="text-xs text-muted-foreground">
-            Modificó respuestas. Al continuar, la parte se enviará nuevamente a revisión.
-          </p>
+          <p className="text-xs text-muted-foreground">{t('modifiedResubmit', lang)}</p>
         </div>
       )}
 
@@ -882,9 +889,11 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
           {surveySections.map((s, index) => (
             <button
               key={s.id}
-              onClick={() => setCurrentSection(index)}
+              onClick={() => canNavigateToSection(index) && setCurrentSection(index)}
+              disabled={!canNavigateToSection(index)}
               className={cn(
                 'w-3 h-3 rounded-full transition-all',
+                !canNavigateToSection(index) && 'opacity-30 cursor-not-allowed',
                 index === currentSection
                   ? 'bg-primary scale-125'
                   : stages[s.id]?.status === 'aprobada'
@@ -897,7 +906,7 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
                   ? 'bg-primary/50'
                   : 'bg-muted-foreground/30'
               )}
-              title={s.title}
+              title={pick(s.title, s.titlePt, lang)}
             />
           ))}
         </div>
@@ -907,10 +916,12 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
         <div className="max-w-2xl mx-auto px-4 pb-32">
           <Card className="border-0 shadow-lg">
             <CardHeader className="pb-4">
-              <CardTitle className="text-2xl">{currentModule.title}</CardTitle>
+              <CardTitle className="text-2xl">
+                {pick(currentModule.title, currentModule.titlePt, lang)}
+              </CardTitle>
               {currentModule.description && (
                 <CardDescription className="text-base whitespace-pre-wrap">
-                  {currentModule.description}
+                  {pick(currentModule.description, currentModule.descriptionPt, lang)}
                 </CardDescription>
               )}
             </CardHeader>
@@ -918,7 +929,7 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
               {progressiveQuestions.map(renderQuestion)}
               {!currentModuleComplete && (
                 <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                  Complete todas las preguntas para continuar.
+                  {t('completeAll', lang)}
                 </p>
               )}
             </CardContent>
@@ -936,7 +947,7 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
             disabled={currentSection === 0 && currentModuleIndex === 0}
           >
             <ChevronLeft className="w-4 h-4 mr-2" />
-            Atrás
+            {t('back', lang)}
           </Button>
 
           {showBottomNext && (
@@ -947,12 +958,14 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
             >
               {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
               {isLastModule && isReviewable && shouldSubmitForReview
-                ? 'Enviar parte a revisión'
+                ? t('sendReview', lang)
+                : isLastModule && isBrowsingApprovedSection
+                ? t('backToSummary', lang)
                 : isLastModule && currentSection === totalSections - 1
                 ? shouldSubmitForReview
-                  ? 'Enviar parte a revisión'
-                  : 'Finalizar'
-                : 'Siguiente'}
+                  ? t('sendReview', lang)
+                  : t('finish', lang)
+                : t('next', lang)}
               <ChevronRight className="w-4 h-4 ml-2" />
             </Button>
           )}
