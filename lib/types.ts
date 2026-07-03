@@ -1,5 +1,7 @@
 // Tipos para el sistema de formularios Mystery Shopper Prosegur
 
+export type Lang = 'es' | 'pt';
+
 export type ConditionOperator = 'eq' | 'neq' | 'in' | 'notIn';
 
 /** Una cláusula de condición sobre una respuesta previa */
@@ -23,6 +25,7 @@ export type Condition =
 export interface QuestionOption {
   value: string;
   label: string;
+  labelPt?: string;
   showIf?: Condition;
 }
 
@@ -30,12 +33,14 @@ export interface QuestionOption {
 export interface MatrixRow {
   id: string;
   label: string;
+  labelPt?: string;
   showIf?: Condition;
 }
 
 export interface Question {
   id: string;
   text: string;
+  textPt?: string;
   type:
     | 'single'
     | 'multiple'
@@ -51,6 +56,7 @@ export interface Question {
   options?: QuestionOption[];
   required?: boolean;
   hint?: string;
+  hintPt?: string;
   showIf?: Condition;
   /** Descalifica toda la encuesta si se cumple (ej. región "Otro") */
   terminateIf?: Condition;
@@ -60,6 +66,8 @@ export interface Question {
   scaleMax?: number;
   scaleMinLabel?: string;
   scaleMaxLabel?: string;
+  scaleMinLabelPt?: string;
+  scaleMaxLabelPt?: string;
   matrixRows?: MatrixRow[];
   matrixColumns?: QuestionOption[];
 }
@@ -68,7 +76,9 @@ export interface Question {
 export interface SurveyModule {
   id: string;
   title: string;
+  titlePt?: string;
   description?: string;
+  descriptionPt?: string;
   showIf?: Condition;
   questions: Question[];
 }
@@ -80,7 +90,9 @@ export interface SurveyModule {
 export interface SurveySection {
   id: string;
   title: string;
+  titlePt?: string;
   description?: string;
+  descriptionPt?: string;
   /** Sección plana (solo general) */
   questions?: Question[];
   /** Partes con módulos internos */
@@ -100,6 +112,14 @@ export interface StageInfo {
 
 export type StagesMap = Record<string, StageInfo>;
 
+/** Nota de revisión por pregunta (activa hasta que el postulante reenvía la parte) */
+export interface ReviewFlag {
+  note: string;
+  sectionId: string;
+}
+
+export type ReviewFlagsMap = Record<string, ReviewFlag>;
+
 export interface EvidenceFile {
   url: string;
   name: string;
@@ -115,6 +135,7 @@ export interface SurveyResponse {
   id: string;
   code?: string;
   accessToken?: string;
+  idioma?: Lang;
   nombre?: string;
   apellido?: string;
   nombreApellido?: string;
@@ -125,6 +146,7 @@ export interface SurveyResponse {
   ultimaEtapa?: string;
   status: ResponseStatus;
   stages: StagesMap;
+  reviewFlags?: ReviewFlagsMap;
   answers: Record<string, AnswerValue>;
   reviewedAt?: string;
   reviewedBy?: string;
@@ -136,6 +158,7 @@ export interface PendingReviewItem {
   id: string;
   code?: string;
   accessToken?: string;
+  idioma?: Lang;
   nombre?: string;
   apellido?: string;
   nombreApellido?: string;
@@ -143,6 +166,7 @@ export interface PendingReviewItem {
   ciudad?: string;
   sectionId: string;
   stages: StagesMap;
+  reviewFlags?: ReviewFlagsMap;
   answers: Record<string, AnswerValue>;
   updatedAt: string;
 }
@@ -165,12 +189,14 @@ export interface PostulanteSummary {
   id: string;
   code?: string;
   accessToken?: string;
+  idioma?: Lang;
   nombre?: string;
   apellido?: string;
   nombreApellido?: string;
   empresa?: string;
   ciudad?: string;
   stages?: StagesMap;
+  reviewFlags?: ReviewFlagsMap;
   answers?: Record<string, AnswerValue>;
   status?: ResponseStatus;
   createdAt: string;

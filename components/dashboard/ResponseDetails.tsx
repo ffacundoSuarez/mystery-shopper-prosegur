@@ -1,16 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,6 +11,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   REVIEWABLE_SECTIONS,
   surveySections,
@@ -38,8 +31,15 @@ import {
   getVisibleQuestions,
   isModuleVisible,
 } from '@/lib/survey-logic';
-import { AnswerValue, Question, StageStatus, StagesMap, SurveyResponse } from '@/lib/types';
-import { FileText, Check, X, MoreVertical, Unlock, Loader2 } from 'lucide-react';
+import {
+  AnswerValue,
+  Question,
+  ReviewFlagsMap,
+  StageStatus,
+  StagesMap,
+  SurveyResponse,
+} from '@/lib/types';
+import { FileText, Check, AlertCircle, MoreVertical, Unlock, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export type ResponseDetailsMode = 'revision' | 'results';
@@ -68,7 +68,7 @@ interface ResponseDetailsProps {
   mode?: ResponseDetailsMode;
   showStageActions?: boolean;
   onApproveStage?: (sectionId: string) => void;
-  onRejectStage?: (sectionId: string, message: string) => void | Promise<void>;
+  onSendCorrections?: (sectionId: string, reviewFlags: ReviewFlagsMap) => void | Promise<void>;
   actionLoading?: string | null;
   onUnlockSurvey?: () => void;
   unlockLoading?: boolean;
@@ -140,18 +140,21 @@ export function ResponseDetails({
   mode = 'revision',
   showStageActions = false,
   onApproveStage,
-  onRejectStage,
+  onSendCorrections,
   actionLoading,
   onUnlockSurvey,
   unlockLoading = false,
 }: ResponseDetailsProps) {
-  const [rejectDialogSectionId, setRejectDialogSectionId] = useState<string | null>(null);
-  const [rejectMessage, setRejectMessage] = useState('');
+  const [draftFlags, setDraftFlags] = useState<ReviewFlagsMap>({});
 
   const stages: StagesMap = response.stages || {};
   const isFinalized = response.answers['proceso-finalizado'] === 'si';
   const fechaFin =
     (response.answers['fecha-fin'] as string) || response.fechaFin || '';
+
+  useEffect(() => {
+    setDraftFlags(response.reviewFlags || {});
+  }, [response.id, response.reviewFlags]);
 
   const reviewableSectionIds =
     mode === 'results'
@@ -161,24 +164,33 @@ export function ResponseDetails({
         })
       : REVIEWABLE_SECTIONS;
 
-  const openRejectDialog = (sectionId: string) => {
-    setRejectDialogSectionId(sectionId);
-    setRejectMessage('');
+  const toggleQuestionFlag = (questionId: string, sectionId: string, checked: boolean) => {
+    setDraftFlags((prev) => {
+      const next = { ...prev };
+      if (checked) {
+        next[questionId] = { note: prev[questionId]?.note || '', sectionId };
+      } else {
+        delete next[questionId];
+      }
+      return next;
+    });
   };
 
-  const closeRejectDialog = () => {
-    setRejectDialogSectionId(null);
-    setRejectMessage('');
+  const updateQuestionNote = (questionId: string, sectionId: string, note: string) => {
+    setDraftFlags((prev) => ({
+      ...prev,
+      [questionId]: { note, sectionId },
+    }));
   };
 
-  const confirmReject = async () => {
-    if (!rejectDialogSectionId || !rejectMessage.trim()) return;
-    try {
-      await onRejectStage?.(rejectDialogSectionId, rejectMessage.trim());
-      closeRejectDialog();
-    } catch {
-      // padre muestra toast
+  const getSectionDraftFlags = (sectionId: string): ReviewFlagsMap => {
+    const result: ReviewFlagsMap = {};
+    for (const [qId, flag] of Object.entries(draftFlags)) {
+      if (flag.sectionId === sectionId && flag.note.trim()) {
+        result[qId] = flag;
+      }
     }
+    return result;
   };
 
   const renderModuleBlock = (sectionId: string, moduleId: string) => {
@@ -186,9 +198,12 @@ export function ResponseDetails({
     const module = section ? getAllSectionModules(section).find((m) => m.id === moduleId) : undefined;
     if (!module || !isModuleVisible(module, response.answers)) return null;
 
+    const stageStatus = stages[sectionId]?.status;
+    const canMarkReview = showStageActions && stageStatus === 'en_revision';
+
     const questions = getVisibleQuestions(module, response.answers).filter(
       (q) =>
-        stageWasSubmitted(stages[sectionId]?.status) ||
+        stageWasSubmitted(stageStatus) ||
         mode === 'results' ||
         hasAnswerValue(response.answers[q.id])
     );
@@ -202,19 +217,59 @@ export function ResponseDetails({
           <p className="text-sm text-muted-foreground">{module.description}</p>
         )}
         <div className="grid gap-3">
-          {questions.map((question) => (
-            <div
-              key={question.id}
-              className="grid grid-cols-1 lg:grid-cols-2 gap-2 py-3 border-b last:border-0"
-            >
-                <span className="text-sm text-muted-foreground leading-relaxed">
-                  {formatQuestionText(question.text)}
-                </span>
-              <div className="text-sm font-medium">
-                {renderAnswerCell(question, response.answers[question.id], response.answers)}
+          {questions.map((question) => {
+            const isMarked = Boolean(draftFlags[question.id]);
+            const note = draftFlags[question.id]?.note || '';
+
+            return (
+              <div
+                key={question.id}
+                className={cn(
+                  'grid grid-cols-1 gap-3 py-3 border-b last:border-0',
+                  isMarked && canMarkReview && 'rounded-lg border border-amber-200 bg-amber-50/40 p-3 -mx-1'
+                )}
+              >
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                  <span className="text-sm text-muted-foreground leading-relaxed">
+                    {formatQuestionText(question.text)}
+                  </span>
+                  <div className="text-sm font-medium">
+                    {renderAnswerCell(question, response.answers[question.id], response.answers)}
+                  </div>
+                </div>
+
+                {canMarkReview && (
+                  <div className="space-y-2 pl-1">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <Checkbox
+                        checked={isMarked}
+                        onCheckedChange={(checked) =>
+                          toggleQuestionFlag(question.id, sectionId, checked === true)
+                        }
+                      />
+                      <span className="font-medium">Marcar a revisar</span>
+                    </label>
+                    {isMarked && (
+                      <div className="space-y-1.5">
+                        <Label htmlFor={`note-${question.id}`} className="text-xs text-muted-foreground">
+                          Observación para el shopper
+                        </Label>
+                        <Textarea
+                          id={`note-${question.id}`}
+                          value={note}
+                          onChange={(e) =>
+                            updateQuestionNote(question.id, sectionId, e.target.value)
+                          }
+                          placeholder="Ej: Sea más explícito en la respuesta..."
+                          className="min-h-[72px] text-sm"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     );
@@ -246,7 +301,8 @@ export function ResponseDetails({
         ? RESULTS_STATUS_LABELS[stageStatus] || stageStatus
         : undefined;
 
-    const rejectionMessage = stages[sectionId]?.rejectionMessage;
+    const sectionFlags = getSectionDraftFlags(sectionId);
+    const markedCount = Object.keys(sectionFlags).length;
 
     return (
       <div
@@ -271,12 +327,17 @@ export function ResponseDetails({
             <div className="flex gap-2 shrink-0">
               <Button
                 size="sm"
-                variant="destructive"
-                disabled={actionLoading === sectionId}
-                onClick={() => openRejectDialog(sectionId)}
+                variant="outline"
+                className="border-amber-400 text-amber-900 hover:bg-amber-100"
+                disabled={actionLoading === sectionId || markedCount === 0}
+                onClick={() => onSendCorrections?.(sectionId, sectionFlags)}
               >
-                <X className="w-4 h-4 mr-1" />
-                Rechazar
+                {actionLoading === sectionId ? (
+                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 mr-1" />
+                )}
+                Enviar a corregir{markedCount > 0 ? ` (${markedCount})` : ''}
               </Button>
               <Button
                 size="sm"
@@ -290,13 +351,6 @@ export function ResponseDetails({
             </div>
           )}
         </div>
-
-        {stageStatus === 'rechazada' && rejectionMessage && (
-          <div className="rounded-lg border border-red-200 bg-red-50/50 p-3 text-sm">
-            <p className="font-medium text-red-800 mb-1">Motivo del rechazo</p>
-            <p className="text-red-900/90 whitespace-pre-wrap">{rejectionMessage}</p>
-          </div>
-        )}
 
         {!hasAnswers ? (
           <p className="text-sm text-muted-foreground italic">
@@ -315,51 +369,6 @@ export function ResponseDetails({
 
   return (
     <div className="space-y-5">
-      <Dialog
-        open={rejectDialogSectionId !== null}
-        onOpenChange={(open) => {
-          if (!open) closeRejectDialog();
-        }}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Rechazar parte</DialogTitle>
-            <DialogDescription>
-              {rejectDialogSectionId
-                ? `Indicá el motivo del rechazo para "${getSectionTitle(rejectDialogSectionId)}".`
-                : 'Indicá el motivo del rechazo.'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="reject-message">Mensaje para el shopper</Label>
-            <Textarea
-              id="reject-message"
-              value={rejectMessage}
-              onChange={(e) => setRejectMessage(e.target.value)}
-              placeholder="Ej: Falta evidencia o la fecha no coincide..."
-              className="min-h-[100px]"
-            />
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={closeRejectDialog}>
-              Cancelar
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={!rejectMessage.trim() || actionLoading === rejectDialogSectionId}
-              onClick={confirmReject}
-            >
-              {actionLoading === rejectDialogSectionId ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <X className="w-4 h-4 mr-2" />
-              )}
-              Confirmar rechazo
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {isFinalized && (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 flex items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2 min-w-0">

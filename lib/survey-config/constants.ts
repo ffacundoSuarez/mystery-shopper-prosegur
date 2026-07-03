@@ -1,24 +1,24 @@
 import { Condition, ConditionClause, QuestionOption } from '../types';
 
 export const SI_NO: QuestionOption[] = [
-  { value: 'si', label: 'Sí' },
-  { value: 'no', label: 'No' },
+  { value: 'si', label: 'Sí', labelPt: 'Sim' },
+  { value: 'no', label: 'No', labelPt: 'Não' },
 ];
 
 export const SI_NO_COD: QuestionOption[] = [
-  { value: '1', label: 'Sí' },
-  { value: '2', label: 'No' },
+  { value: '1', label: 'Sí', labelPt: 'Sim' },
+  { value: '2', label: 'No', labelPt: 'Não' },
 ];
 
 export const PAISES: QuestionOption[] = [
-  { value: '1', label: 'Argentina' },
-  { value: '2', label: 'Colombia' },
-  { value: '3', label: 'Perú' },
-  { value: '4', label: 'Chile' },
-  { value: '5', label: 'Paraguay' },
-  { value: '6', label: 'Uruguay' },
-  { value: '7', label: 'Portugal' },
-  { value: '8', label: 'Alemania' },
+  { value: '1', label: 'Argentina', labelPt: 'Argentina' },
+  { value: '2', label: 'Colombia', labelPt: 'Colombia' },
+  { value: '3', label: 'Perú', labelPt: 'Perú' },
+  { value: '4', label: 'Chile', labelPt: 'Chile' },
+  { value: '5', label: 'Paraguay', labelPt: 'Paraguay' },
+  { value: '6', label: 'Uruguay', labelPt: 'Uruguay' },
+  { value: '7', label: 'Portugal', labelPt: 'Portugal' },
+  { value: '8', label: 'Alemania', labelPt: 'Alemania' },
 ];
 
 /** Condición: país = código(s) */
@@ -27,7 +27,11 @@ export function pais(...codes: string[]): ConditionClause {
 }
 
 function regionOptions(cityLabel: string, extra: QuestionOption[] = []): QuestionOption[] {
-  return [{ value: 'principal', label: cityLabel }, { value: 'otro', label: 'Otro' }, ...extra];
+  return [
+    { value: 'principal', label: cityLabel, labelPt: cityLabel },
+    { value: 'otro', label: 'Otro', labelPt: 'Outro' },
+    ...extra,
+  ];
 }
 
 export const REGION_ARG = regionOptions('AMBA (Gran Buenos Aires & CABA)');
@@ -38,54 +42,79 @@ export const REGION_PRY = regionOptions('Asunción');
 export const REGION_URY = regionOptions('Montevideo');
 export const REGION_POR = regionOptions('Lisboa');
 export const REGION_DEU: QuestionOption[] = [
-  { value: 'essen', label: 'Essen' },
-  { value: 'dortmund', label: 'Dortmund' },
-  { value: 'dusseldorf', label: 'Düsseldorf' },
-  { value: 'colonia', label: 'Colonia' },
-  { value: 'berlin', label: 'Berlin' },
-  { value: 'munich', label: 'Munich' },
-  { value: 'otro', label: 'Otro' },
+  { value: 'essen', label: 'Essen', labelPt: 'Essen' },
+  { value: 'dortmund', label: 'Dortmund', labelPt: 'Dortmund' },
+  { value: 'dusseldorf', label: 'Düsseldorf', labelPt: 'Düsseldorf' },
+  { value: 'colonia', label: 'Colonia', labelPt: 'Colonia' },
+  { value: 'berlin', label: 'Berlin', labelPt: 'Berlin' },
+  { value: 'munich', label: 'Munich', labelPt: 'Munich' },
+  { value: 'otro', label: 'Otro', labelPt: 'Outro' },
 ];
 
 /** Marcas F3 filtradas por país (rotate en la pregunta) */
 export const MARCAS: QuestionOption[] = [
-  { value: '1', label: 'ADT', showIf: pais('1', '2', '3') },
-  { value: '2', label: 'Verisure', showIf: pais('1', '2', '3', '4') },
-  { value: '3', label: 'Telesentinel', showIf: pais('1') },
-  { value: '4', label: 'Alarmar', showIf: pais('1') },
-  { value: '5', label: 'Atlas', showIf: pais('1') },
-  { value: '6', label: 'Securitas', showIf: pais('1') },
-  { value: '7', label: 'Protek', showIf: pais('1') },
-  { value: '8', label: 'Nos Securitas', showIf: pais('1') },
-  { value: '9', label: 'Securitas Direct – Verisure', showIf: pais('1') },
-  { value: '10', label: 'Maxima', showIf: pais('1') },
-  { value: '11', label: 'Prosegur', showIf: pais('1', '2', '3', '4', '5', '6', '7', '8') },
-  { value: '12', label: 'Secu24', showIf: pais('1') },
-  { value: '13', label: 'Otra (especificar)', showIf: pais('1', '2', '3', '4', '5', '6', '7', '8') },
+  { value: '1', label: 'ADT', labelPt: 'ADT', showIf: pais('1', '2', '3') },
+  { value: '2', label: 'Verisure', labelPt: 'Verisure', showIf: pais('1', '2', '3', '4') },
+  { value: '3', label: 'Telesentinel', labelPt: 'Telesentinel', showIf: pais('1') },
+  { value: '4', label: 'Alarmar', labelPt: 'Alarmar', showIf: pais('1') },
+  { value: '5', label: 'Atlas', labelPt: 'Atlas', showIf: pais('1') },
+  { value: '6', label: 'Securitas', labelPt: 'Securitas', showIf: pais('1') },
+  { value: '7', label: 'Protek', labelPt: 'Protek', showIf: pais('1') },
+  { value: '8', label: 'Nos Securitas', labelPt: 'Nos Securitas', showIf: pais('1') },
+  { value: '9', label: 'Securitas Direct – Verisure', labelPt: 'Securitas Direct – Verisure', showIf: pais('1') },
+  { value: '10', label: 'Maxima', labelPt: 'Maxima', showIf: pais('1') },
+  { value: '11', label: 'Prosegur', labelPt: 'Prosegur', showIf: pais('1', '2', '3', '4', '5', '6', '7', '8') },
+  { value: '12', label: 'Secu24', labelPt: 'Secu24', showIf: pais('1') },
+  {
+    value: '13',
+    label: 'Otra (especificar)',
+    labelPt: 'Outra (especificar)',
+    showIf: pais('1', '2', '3', '4', '5', '6', '7', '8'),
+  },
 ];
 
 export const ESCALA_5: QuestionOption[] = [
-  { value: '5', label: 'Excelente / Totalmente' },
-  { value: '4', label: 'Bueno / Bastante' },
-  { value: '3', label: 'Regular / Parcialmente' },
-  { value: '2', label: 'Malo / Muy poco' },
-  { value: '1', label: 'Muy malo / Nada' },
+  { value: '5', label: 'Excelente / Totalmente', labelPt: 'Excelente / Totalmente' },
+  { value: '4', label: 'Bueno / Bastante', labelPt: 'Bom / Bastante' },
+  { value: '3', label: 'Regular / Parcialmente', labelPt: 'Regular / Parcialmente' },
+  { value: '2', label: 'Malo / Muy poco', labelPt: 'Mau / Muito pouco' },
+  { value: '1', label: 'Muy malo / Nada', labelPt: 'Muito mau / Nada' },
 ];
 
 export const ESCALA_SATISFACCION: QuestionOption[] = [
-  { value: '5', label: 'Totalmente satisfecho' },
-  { value: '4', label: 'Algo satisfecho' },
-  { value: '3', label: 'Ni satisfecho ni insatisfecho' },
-  { value: '2', label: 'Insatisfecho' },
-  { value: '1', label: 'Muy insatisfecho' },
+  { value: '5', label: 'Totalmente satisfecho', labelPt: 'Totalmente satisfeito' },
+  { value: '4', label: 'Algo satisfecho', labelPt: 'Algo satisfeito' },
+  { value: '3', label: 'Ni satisfecho ni insatisfecho', labelPt: 'Nem satisfeito nem insatisfeito' },
+  { value: '2', label: 'Insatisfecho', labelPt: 'Insatisfeito' },
+  { value: '1', label: 'Muy insatisfecho', labelPt: 'Muito insatisfeito' },
 ];
 
 export const P7_OPCIONES: QuestionOption[] = [
-  { value: '1', label: 'Da un precio cerrado inmediatamente' },
-  { value: '2', label: 'Da un rango de precio aproximado' },
-  { value: '3', label: 'Explica que depende de una visita presencial y del tipo de vivienda/negocio' },
-  { value: '4', label: 'Posterga la respuesta explicando que primero debe conocer las necesidades del cliente' },
-  { value: '5', label: 'Utiliza el precio como gancho obligatorio para forzar la visita presencial' },
+  {
+    value: '1',
+    label: 'Da un precio cerrado inmediatamente',
+    labelPt: 'Indica um preço fechado de imediato',
+  },
+  {
+    value: '2',
+    label: 'Da un rango de precio aproximado',
+    labelPt: 'Indica uma faixa de preço aproximada',
+  },
+  {
+    value: '3',
+    label: 'Explica que depende de una visita presencial y del tipo de vivienda/negocio',
+    labelPt: 'Explica que depende de uma visita presencial e do tipo de habitação/negócio',
+  },
+  {
+    value: '4',
+    label: 'Posterga la respuesta explicando que primero debe conocer las necesidades del cliente',
+    labelPt: 'Adia a resposta explicando que primeiro tem de conhecer as necessidades do cliente',
+  },
+  {
+    value: '5',
+    label: 'Utiliza el precio como gancho obligatorio para forzar la visita presencial',
+    labelPt: 'Utiliza o preço como gancho obrigatório para forçar a visita presencial',
+  },
 ];
 
 export const SI_P7_PRECIO: ConditionClause = { questionId: 'p7-precio-respuesta', values: ['1', '2'] };

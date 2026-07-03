@@ -10,9 +10,14 @@ import {
 } from './survey-logic';
 import { AnswerValue, EvidenceFile, Question } from './types';
 
-/** Quita prefijos internos (F1., P17A., C1.) del texto mostrado al usuario */
+/** Devuelve el texto de la pregunta tal cual (incluye códigos F1., P17A., C1., etc.) */
 export function formatQuestionText(text: string): string {
-  return text.replace(/^[FPCfpc]\d+[A-Za-z]?\.\s*/, '').trim();
+  return text.trim();
+}
+
+/** Elige texto en español o portugués según el idioma del cuestionario */
+export function pick(es: string, pt: string | undefined, lang: 'es' | 'pt'): string {
+  return lang === 'pt' && pt ? pt : es;
 }
 
 export function findQuestion(questionId: string): Question | undefined {

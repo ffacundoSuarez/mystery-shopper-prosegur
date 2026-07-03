@@ -8,7 +8,7 @@ import {
 } from '@/lib/data';
 import { PAISES } from '@/lib/survey-config/constants';
 import { getPartProgressLabel, getScreeningSnapshot } from '@/lib/survey-snapshot';
-import { PostulanteSummary } from '@/lib/types';
+import { Lang, PostulanteSummary } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -59,6 +59,7 @@ export default function PostulantesPage() {
   const [creating, setCreating] = useState(false);
   const [nombre, setNombre] = useState('');
   const [apellido, setApellido] = useState('');
+  const [idioma, setIdioma] = useState<Lang>('es');
   const [deleteTarget, setDeleteTarget] = useState<PostulanteSummary | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -88,7 +89,6 @@ export default function PostulantesPage() {
         term === '' ||
         name.toLowerCase().includes(term) ||
         (p.code || '').toLowerCase().includes(term) ||
-        (snapshot.marca || '').toLowerCase().includes(term) ||
         (snapshot.pais || '').toLowerCase().includes(term);
       const matchesPais =
         filterPais === 'all' || snapshot.paisCode === filterPais;
@@ -103,11 +103,12 @@ export default function PostulantesPage() {
     }
     setCreating(true);
     try {
-      const created = await adminCreatePostulante(nombre.trim(), apellido.trim());
+      const created = await adminCreatePostulante(nombre.trim(), apellido.trim(), idioma);
       setPostulantes((prev) => [created, ...prev]);
       setDialogOpen(false);
       setNombre('');
       setApellido('');
+      setIdioma('es');
       toast.success(`Postulante ${created.code} creado`);
     } catch {
       toast.error('No se pudo crear el postulante');
@@ -166,7 +167,7 @@ export default function PostulantesPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por nombre, ID, país o marca..."
+                placeholder="Buscar por nombre, ID o país..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
@@ -208,10 +209,8 @@ export default function PostulantesPage() {
                     <th className="text-left p-3 pl-6 font-medium">ID</th>
                     <th className="text-left p-3 font-medium">Nombre</th>
                     <th className="text-left p-3 font-medium">País</th>
-                    <th className="text-left p-3 font-medium">Marca</th>
-                    <th className="text-left p-3 font-medium hidden md:table-cell">Categoría</th>
-                    <th className="text-left p-3 font-medium hidden lg:table-cell">Progreso</th>
-                    <th className="text-left p-3 font-medium hidden xl:table-cell">Link</th>
+                    <th className="text-left p-3 font-medium hidden md:table-cell">Progreso</th>
+                    <th className="text-left p-3 font-medium hidden lg:table-cell">Link</th>
                     <th className="text-right p-3 pr-6 font-medium">Acciones</th>
                   </tr>
                 </thead>
@@ -244,29 +243,10 @@ export default function PostulantesPage() {
                             <span className="text-muted-foreground">—</span>
                           )}
                         </td>
-                        <td className="p-3">
-                          {snapshot.marca ? (
-                            <span className="inline-flex flex-col">
-                              <span>{snapshot.marca}</span>
-                              {snapshot.canal && (
-                                <span className="text-xs text-muted-foreground">
-                                  {snapshot.canal}
-                                </span>
-                              )}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        <td className="p-3 hidden md:table-cell">
-                          {snapshot.categoria || (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        <td className="p-3 hidden lg:table-cell text-muted-foreground whitespace-nowrap">
+                        <td className="p-3 hidden md:table-cell text-muted-foreground whitespace-nowrap">
                           {progress}
                         </td>
-                        <td className="p-3 hidden xl:table-cell max-w-[12rem]">
+                        <td className="p-3 hidden lg:table-cell max-w-[12rem]">
                           <span className="text-muted-foreground truncate block">
                             {p.accessToken ? getSurveyUrl(p.accessToken) : '-'}
                           </span>
@@ -361,6 +341,18 @@ export default function PostulantesPage() {
                 onChange={(e) => setApellido(e.target.value)}
                 placeholder="Apellido"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="idioma">Idioma del cuestionario</Label>
+              <Select value={idioma} onValueChange={(v) => setIdioma(v as Lang)}>
+                <SelectTrigger id="idioma">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="es">Español</SelectItem>
+                  <SelectItem value="pt">Português (Portugal)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>
