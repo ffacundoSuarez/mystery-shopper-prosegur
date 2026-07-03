@@ -25,6 +25,7 @@ import {
   SI_P4_NO,
   SI_P45,
   SI_P7_PRECIO,
+  evidenciasModule,
   pais,
 } from './constants';
 
@@ -991,5 +992,6 @@ export const parte1: SurveySection = {
         },
       ],
     },
+    evidenciasModule(1),
   ],
 };

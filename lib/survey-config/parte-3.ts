@@ -1,5 +1,5 @@
 import { SurveySection } from '../types';
-import { SI_NO_COD, SI_P64, SI_P67 } from './constants';
+import { SI_NO_COD, SI_P64, SI_P67, evidenciasModule } from './constants';
 
 export const parte3: SurveySection = {
   id: 'parte-3',
@@ -78,5 +78,6 @@ export const parte3: SurveySection = {
         },
       ],
     },
+    evidenciasModule(3),
   ],
 };

@@ -1,4 +1,32 @@
-import { Condition, ConditionClause, QuestionOption } from '../types';
+import { Condition, ConditionClause, QuestionOption, SurveyModule } from '../types';
+
+/**
+ * Crea el módulo de evidencias que se muestra al final de cada parte.
+ * Permite adjuntar cualquier archivo (audios, imágenes, videos, PDF, etc.).
+ * Es opcional: no bloquea el envío de la parte a revisión.
+ * @param parte Número de parte (1, 2 o 3) para generar IDs únicos.
+ */
+export function evidenciasModule(parte: number): SurveyModule {
+  return {
+    id: `evidencias-p${parte}`,
+    title: 'Evidencias',
+    titlePt: 'Evidências',
+    description:
+      'Adjunte aquí las evidencias de esta parte. Puede subir audios, imágenes, videos, PDF, capturas de pantalla, etc. (opcional).',
+    descriptionPt:
+      'Anexe aqui as evidências desta parte. Pode enviar áudios, imagens, vídeos, PDF, capturas de ecrã, etc. (opcional).',
+    questions: [
+      {
+        id: `evidencia-parte-${parte}`,
+        text: 'Adjuntar evidencias',
+        textPt: 'Anexar evidências',
+        type: 'evidence',
+        hint: 'Audios, imágenes, videos, PDF y cualquier otro archivo.',
+        hintPt: 'Áudios, imagens, vídeos, PDF e qualquer outro ficheiro.',
+      },
+    ],
+  };
+}
 
 export const SI_NO: QuestionOption[] = [
   { value: 'si', label: 'Sí', labelPt: 'Sim' },

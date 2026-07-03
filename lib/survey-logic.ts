@@ -290,7 +290,9 @@ export function isQuestionAnswered(
   }
 
   if (question.type === 'evidence') {
-    return isEvidenceValue(value);
+    // Las evidencias son opcionales salvo que se marquen required:
+    // permite avanzar/enviar la parte aunque no se adjunten archivos.
+    return question.required ? isEvidenceValue(value) : true;
   }
 
   if (!hasAnswerValue(value)) return false;
