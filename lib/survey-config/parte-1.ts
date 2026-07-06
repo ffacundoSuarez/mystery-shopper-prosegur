@@ -273,17 +273,17 @@ export const parte1: SurveySection = {
         },
         {
           id: 'p7-precio-respuesta',
-          text: 'P7. Ante la consulta de precio ("¿Me podría decir aproximadamente cuánto sale?"), ¿cómo responde el comercial?',
-          textPt: 'P7. Perante a consulta de preço ("Pode dizer-me aproximadamente quanto custa?"), como responde o comercial?',
+          text: 'P7. Ante la consulta de precio ¿Cómo responde el comercial frente a la consulta inmediata de precio?',
+          textPt: 'P7. Perante a consulta de preço, como responde o comercial perante a consulta imediata de preço?',
           type: 'single',
           options: P7_OPCIONES,
-          hint: 'Decir de forma natural en medio de la conversación.',
-          hintPt: 'Dizer de forma natural a meio da conversa.',
+          hint: 'Instrucción al mystery: en medio de la conversación, debés decir de forma natural: "¿Me podría decir aproximadamente cuánto sale?"',
+          hintPt: 'Instrução ao mystery: a meio da conversa, deve dizer de forma natural: "Pode dizer-me aproximadamente quanto custa?"',
         },
         {
           id: 'p8-precio-texto',
-          text: 'P8. Detallar la respuesta textual del comercial ante la consulta de precio',
-          textPt: 'P8. Detalhar a resposta textual do comercial perante a consulta de preço',
+          text: 'P8. Ante la consulta de precio ¿Cómo responde el comercial frente a la consulta inmediata de precio? Detallar la respuesta textual del comercial',
+          textPt: 'P8. Perante a consulta de preço, como responde o comercial perante a consulta imediata de preço? Detalhar a resposta textual do comercial',
           type: 'longtext',
         },
       ],
@@ -362,8 +362,8 @@ export const parte1: SurveySection = {
       questions: [
         {
           id: 'p15-atributos',
-          text: 'P15. Al hablar de la empresa, ¿qué atributos, fortalezas o argumentos utilizó el comercial para posicionar el prestigio de su marca?',
-          textPt: 'P15. Ao falar da empresa, que atributos, pontos fortes ou argumentos utilizou o comercial para posicionar o prestígio da sua marca?',
+          text: 'P15. Al hablar de la empresa, ¿qué atributos, fortalezas o argumentos utilizó el comercial para posicionar el prestigio de su marca? Describa textualmente lo que mencionó:',
+          textPt: 'P15. Ao falar da empresa, que atributos, pontos fortes ou argumentos utilizou o comercial para posicionar o prestígio da sua marca? Descreva textualmente o que mencionou:',
           type: 'longtext',
         },
         {
@@ -468,8 +468,8 @@ export const parte1: SurveySection = {
         },
         {
           id: 'p19-diagnostico-calidad',
-          text: 'P19. ¿Qué tan completo y profundo le pareció el diagnóstico del comercial?',
-          textPt: 'P19. Quão completo e profundo lhe pareceu o diagnóstico do comercial?',
+          text: 'P19. ¿Qué tan completo y profundo le pareció el diagnóstico que hizo el comercial para evaluar la seguridad de su inmueble?',
+          textPt: 'P19. Quão completo e profundo lhe pareceu o diagnóstico que fez o comercial para avaliar a segurança do seu imóvel?',
           type: 'single',
           options: [
             { value: '5', label: 'Excelente', labelPt: 'Excelente' },
@@ -488,8 +488,8 @@ export const parte1: SurveySection = {
         },
         {
           id: 'p21-personalizacion',
-          text: 'P21. ¿El comercial logró adaptar y personalizar la propuesta según sus necesidades?',
-          textPt: 'P21. O comercial conseguiu adaptar e personalizar a proposta de acordo com as suas necessidades?',
+          text: 'P21. ¿El comercial logró adaptar y personalizar la propuesta final según las necesidades específicas que usted le planteó?',
+          textPt: 'P21. O comercial conseguiu adaptar e personalizar a proposta final de acordo com as necessidades específicas que você lhe apresentou?',
           type: 'single',
           options: [
             { value: '5', label: 'Totalmente', labelPt: 'Totalmente' },
@@ -508,8 +508,8 @@ export const parte1: SurveySection = {
       questions: [
         {
           id: 'p22-servicio',
-          text: 'P22. Describa detalladamente el servicio ofrecido (equipamiento, sensores, cámaras, app, monitoreo, etc.)',
-          textPt: 'P22. Descreva detalhadamente o serviço oferecido (equipamento, sensores, câmaras, app, monitorização, etc.)',
+          text: 'P22. Describa detalladamente el servicio ofrecido por el comercial (todo lo que incluye la propuesta: equipamiento, sensores, cámaras, aplicación móvil, monitoreo y servicios complementarios):',
+          textPt: 'P22. Descreva detalhadamente o serviço oferecido pelo comercial (tudo o que inclui a proposta: equipamento, sensores, câmaras, aplicação móvel, monitorização e serviços complementares):',
           type: 'longtext',
         },
         {
@@ -564,41 +564,41 @@ export const parte1: SurveySection = {
         },
         {
           id: 'p25-beneficios',
-          text: 'P25. ¿Qué beneficios específicos mencionó el comercial de forma espontánea?',
-          textPt: 'P25. Que benefícios específicos mencionou o comercial de forma espontânea?',
+          text: 'P25. ¿Qué beneficios específicos (ej. tranquilidad, velocidad de respuesta, protección, etc.) mencionó el comercial de forma espontánea durante la conversación?',
+          textPt: 'P25. Que benefícios específicos (ex. tranquilidade, rapidez de resposta, proteção, etc.) mencionou o comercial de forma espontânea durante a conversa?',
           type: 'longtext',
         },
         {
           id: 'p26-diferenciales',
-          text: 'P26. ¿Qué diferenciales clave destacó el comercial?',
-          textPt: 'P26. Que diferenciais-chave destacou o comercial?',
+          text: 'P26. ¿Qué diferenciales clave destacó el comercial para demostrar que su propuesta era la mejor opción?',
+          textPt: 'P26. Que diferenciais-chave destacou o comercial para demonstrar que a sua proposta era a melhor opção?',
           type: 'longtext',
         },
         {
           id: 'p26a-equipos',
-          text: 'P26A. ¿El comercial detalló si los equipos son alquilados o quedan como propios?',
-          textPt: 'P26A. O comercial detalhou se os equipamentos são alugados ou ficam como propriedade?',
+          text: 'P26A. ¿El comercial detalló sobre si el/los equipos son alquilados o tras el pago quedan como propios?',
+          textPt: 'P26A. O comercial detalhou sobre se o(s) equipamento(s) são alugados ou, após o pagamento, ficam como propriedade?',
           type: 'single',
           options: [
             {
               value: '1',
-              label: 'Alquilados de manera espontánea',
-              labelPt: 'Alugados de forma espontânea',
+              label: 'Comentó que son alquilados de manera espontánea',
+              labelPt: 'Comentou que são alugados de forma espontânea',
             },
             {
               value: '2',
-              label: 'Alquilados solo luego de que le pregunté',
-              labelPt: 'Alugados apenas depois de lhe ter perguntado',
+              label: 'Comentó que son alquilados solo luego de que le pregunté',
+              labelPt: 'Comentou que são alugados apenas depois de lhe ter perguntado',
             },
             {
               value: '3',
-              label: 'Propios de manera espontánea',
-              labelPt: 'Próprios de forma espontânea',
+              label: 'Comentó que quedan como propios de manera espontánea',
+              labelPt: 'Comentou que ficam como propriedade de forma espontânea',
             },
             {
               value: '4',
-              label: 'Propios solo luego de que le pregunté',
-              labelPt: 'Próprios apenas depois de lhe ter perguntado',
+              label: 'Comentó que quedan como propios solo luego de que le pregunté',
+              labelPt: 'Comentou que ficam como propriedade apenas depois de lhe ter perguntado',
             },
           ],
         },
@@ -621,8 +621,8 @@ export const parte1: SurveySection = {
         },
         {
           id: 'p27-puntos',
-          text: 'P27. ¿El comercial explicó activamente los siguientes puntos? Marque Espontáneo o Solicitado',
-          textPt: 'P27. O comercial explicou ativamente os seguintes pontos? Marque Espontâneo ou Solicitado',
+          text: 'P27. ¿El comercial explicó activamente sobre los siguientes puntos? Marque si el elemento fue abordado por iniciativa del comercial (Espontáneo) o fue solicitado (Solicitado):',
+          textPt: 'P27. O comercial explicou ativamente sobre os seguintes pontos? Marque se o elemento foi abordado por iniciativa do comercial (Espontâneo) ou foi solicitado (Solicitado):',
           type: 'matrix',
           matrixColumns: ESPONT_SOLIC,
           matrixRows: [
@@ -725,14 +725,14 @@ export const parte1: SurveySection = {
       questions: [
         {
           id: 'p28-objecion-caro',
-          text: 'P28. Ante la objeción "Me parece bastante caro el servicio/abono", ¿cómo responde el comercial?',
-          textPt: 'P28. Perante a objeção "Acho o serviço/mensalidade bastante caro", como responde o comercial?',
+          text: 'P28. Ante la objeción ("Me parece bastante caro el servicio/abono") ¿Cómo responde el comercial frente a esta objeción? Detallar la respuesta textual del comercial',
+          textPt: 'P28. Perante a objeção ("Acho o serviço/mensalidade bastante caro") como responde o comercial perante esta objeção? Detalhar a resposta textual do comercial',
           type: 'longtext',
         },
         {
           id: 'p29-objecion-competencia',
-          text: 'P29. Ante la objeción "Otra empresa me ofreció un servicio más barato", ¿cómo responde el comercial?',
-          textPt: 'P29. Perante a objeção "Outra empresa ofereceu-me um serviço mais barato", como responde o comercial?',
+          text: 'P29. Ante la objeción ("Otra empresa me ofreció un servicio más barato") ¿Cómo responde el comercial frente a esta objeción? Detallar la respuesta textual del comercial',
+          textPt: 'P29. Perante a objeção ("Outra empresa ofereceu-me um serviço mais barato") como responde o comercial perante esta objeção? Detalhar a resposta textual do comercial',
           type: 'longtext',
         },
         {
@@ -744,8 +744,8 @@ export const parte1: SurveySection = {
         },
         {
           id: 'p31-promociones',
-          text: 'P31. ¿Mencionó de forma proactiva promociones vigentes, bonificaciones o incentivos comerciales?',
-          textPt: 'P31. Mencionou de forma proativa promoções vigentes, bonificações ou incentivos comerciais?',
+          text: 'P31. ¿Mencionó de forma proactiva promociones vigentes, bonificaciones o incentivos comerciales que impacten en la anterior propuesta?',
+          textPt: 'P31. Mencionou de forma proativa promoções vigentes, bonificações ou incentivos comerciais que tenham impacto na proposta anterior?',
           type: 'single',
           options: SI_NO_COD,
         },
@@ -830,8 +830,8 @@ export const parte1: SurveySection = {
       questions: [
         {
           id: 'p37-competencia',
-          text: 'P37. Ante el comentario de que también evalúa a la competencia, ¿cómo responde el comercial?',
-          textPt: 'P37. Perante o comentário de que também está a avaliar a concorrência, como responde o comercial?',
+          text: 'P37. Ante el comentario ("Aún no voy a decidir. También estoy evaluando a la competencia (mencionar nombre empresa correspondiente).") ¿Cómo responde el comercial frente a este comentario? Detallar la respuesta textual del comercial',
+          textPt: 'P37. Perante o comentário ("Ainda não vou decidir. Também estou a avaliar a concorrência (mencionar nome da empresa correspondente).") como responde o comercial perante este comentário? Detalhar a resposta textual do comercial',
           type: 'longtext',
         },
         {
@@ -861,14 +861,14 @@ export const parte1: SurveySection = {
         },
         {
           id: 'p40-rival',
-          text: 'P40. ¿Nombró por iniciativa propia a alguna empresa como rival? Registre qué marca y qué dijo',
-          textPt: 'P40. Mencionou por iniciativa própria alguma empresa como rival? Registe que marca e o que disse',
+          text: 'P40. Durante la charla, ¿el comercial nombró por iniciativa propia a alguna empresa específica como su principal rival o competidor? Registre qué marca mencionó y qué dijo:',
+          textPt: 'P40. Durante a conversa, o comercial mencionou por iniciativa própria alguma empresa específica como o seu principal rival ou concorrente? Registe que marca mencionou e o que disse:',
           type: 'longtext',
         },
         {
           id: 'p40a-comparaciones',
-          text: 'P40A. ¿Hace comparaciones con marcas de la competencia? ¿Cuáles? ¿Qué puntos remarca?',
-          textPt: 'P40A. Faz comparações com marcas da concorrência? Quais? Que pontos destaca?',
+          text: 'P40A. Durante la charla, ¿el comercial hace comparaciones con marcas de la competencia? ¿Cuáles? ¿Qué puntos remarca?',
+          textPt: 'P40A. Durante a conversa, o comercial faz comparações com marcas da concorrência? Quais? Que pontos destaca?',
           type: 'longtext',
         },
       ],
@@ -894,27 +894,27 @@ export const parte1: SurveySection = {
         },
         {
           id: 'p43-referidos',
-          text: 'P43. ¿El comercial solicitó referidos de forma proactiva?',
-          textPt: 'P43. O comercial solicitou referências de forma proativa?',
+          text: 'P43. ¿El comercial solicitó de forma proactiva referidos, independientemente de si usted contrataba o no?',
+          textPt: 'P43. O comercial solicitou de forma proativa referências, independentemente de se você contratava ou não?',
           type: 'single',
           options: SI_NO_COD,
         },
         {
           id: 'p44-objecion-pensar',
-          text: 'P44. Ante "No estoy seguro/a, tengo que pensarlo", ¿cómo respondió el comercial?',
-          textPt: 'P44. Perante "Não tenho a certeza, preciso de pensar", como respondeu o comercial?',
+          text: 'P44. Ante la objeción ("No estoy seguro/a, tengo que pensarlo/meditarlo con mi pareja") ¿Cómo respondió el comercial? Describa con detalle la estrategia desarrollada por el comercial',
+          textPt: 'P44. Perante a objeção ("Não tenho a certeza, tenho de pensar/refletir com o/a meu/minha companheiro/a") como respondeu o comercial? Descreva em detalhe a estratégia desenvolvida pelo comercial',
           type: 'longtext',
         },
         {
           id: 'p44a-seguir-negociando',
-          text: 'P44A. ¿Intentó seguir negociando o realizó un nuevo ofrecimiento?',
-          textPt: 'P44A. Tentou continuar a negociar ou fez uma nova proposta?',
+          text: 'P44A. Ante la objeción. ¿El comercial intentó seguir negociando? ¿Realizó un nuevo ofrecimiento? Detallar en caso de que sí.',
+          textPt: 'P44A. Perante a objeção. O comercial tentou continuar a negociar? Fez uma nova proposta? Detalhar em caso afirmativo.',
           type: 'longtext',
         },
         {
           id: 'p44b-info-adicional',
-          text: 'P44B. ¿Le preguntó qué información adicional necesitaría para definirse?',
-          textPt: 'P44B. Perguntou-lhe que informação adicional precisaria para se decidir?',
+          text: 'P44B. ¿El comercial le pregunta sobre qué información adicional necesitaría para definirse o qué necesitaría en general para definir su decisión?',
+          textPt: 'P44B. O comercial pergunta-lhe sobre que informação adicional precisaria para se decidir ou o que precisaria em geral para definir a sua decisão?',
           type: 'single',
           options: SI_NO_COD,
         },
@@ -947,27 +947,27 @@ export const parte1: SurveySection = {
       questions: [
         {
           id: 'p48-satisfaccion',
-          text: 'P48. ¿Cuál es su nivel de satisfacción con la atención general del comercial?',
-          textPt: 'P48. Qual é o seu nível de satisfação com o atendimento geral do comercial?',
+          text: 'P48. ¿Cuál es su nivel de satisfacción con la atención general que le brindó el comercial durante todo el contacto?',
+          textPt: 'P48. Qual é o seu nível de satisfação com o atendimento geral que o comercial lhe prestou durante todo o contacto?',
           type: 'single',
           options: ESCALA_SATISFACCION,
         },
         {
           id: 'p49-mejor',
-          text: 'P49. ¿Qué fue lo mejor de la experiencia o qué le generó mayor confianza?',
-          textPt: 'P49. O que foi o melhor da experiência ou o que lhe gerou maior confiança?',
+          text: 'P49. ¿Qué fue lo mejor de la experiencia o qué aspecto le generó mayor confianza?',
+          textPt: 'P49. O que foi o melhor da experiência ou que aspeto lhe gerou maior confiança?',
           type: 'longtext',
         },
         {
           id: 'p50-peor',
-          text: 'P50. ¿Qué fue lo peor de la experiencia o qué le generó mayor desconfianza?',
-          textPt: 'P50. O que foi o pior da experiência ou o que lhe gerou maior desconfiança?',
+          text: 'P50. ¿Qué fue lo peor de la experiencia o qué aspecto le generó mayor desconfianza?',
+          textPt: 'P50. O que foi o pior da experiência ou que aspeto lhe gerou maior desconfiança?',
           type: 'longtext',
         },
         {
           id: 'p51-contrataria',
-          text: 'P51. Basándose en la gestión de este comercial, ¿contrataría el servicio?',
-          textPt: 'P51. Com base na gestão deste comercial, contrataria o serviço?',
+          text: 'P51. Basándose exclusivamente en la gestión de este comercial, ¿contrataría el servicio?',
+          textPt: 'P51. Baseando-se exclusivamente na gestão deste comercial, contrataria o serviço?',
           type: 'single',
           options: SI_NO_COD,
         },
@@ -1017,8 +1017,8 @@ export const parte1: SurveySection = {
         },
         {
           id: 'p55-actitud',
-          text: 'P55. ¿Cómo califica la actitud inicial del comercial al llegar a su hogar/negocio?',
-          textPt: 'P55. Como avalia a atitude inicial do comercial ao chegar à sua habitação/negócio?',
+          text: 'P55. ¿Cómo califica la actitud inicial demostrada por el comercial al momento de llegar a su hogar/negocio?',
+          textPt: 'P55. Como avalia a atitude inicial demonstrada pelo comercial no momento de chegar à sua habitação/negócio?',
           type: 'single',
           options: [
             { value: '5', label: 'Excelente', labelPt: 'Excelente' },
