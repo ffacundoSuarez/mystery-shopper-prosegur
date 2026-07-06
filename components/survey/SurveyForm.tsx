@@ -15,33 +15,25 @@ import {
 } from '@/lib/survey-config';
 import {
   getDisqualification,
-  getOrderedOptions,
   getPartAnswers,
   getProgressiveQuestions,
-  getVisibleMatrixRows,
   isModuleComplete,
   partHasAnswers,
 } from '@/lib/survey-logic';
 import { formatQuestionText, pick } from '@/lib/format';
 import { t } from '@/lib/survey-i18n';
-import { AnswerValue, EvidenceFile, Lang, MatrixAnswer, Question, ReviewFlagsMap, StageStatus, StagesMap, SurveyModule } from '@/lib/types';
+import { AnswerValue, EvidenceFile, Lang, Question, ReviewFlagsMap, StageStatus, StagesMap, SurveyModule } from '@/lib/types';
 import { getResponseByToken, saveStageByToken, uploadEvidence } from '@/lib/data';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Textarea } from '@/components/ui/textarea';
-import { DateTimePicker } from '@/components/survey/DateTimePicker';
+import { QuestionInput } from '@/components/survey/QuestionInput';
 import {
   ChevronLeft,
   ChevronRight,
   Check,
-  Upload,
   Loader2,
-  FileText,
-  X,
   Eye,
   Clock,
   AlertCircle,
@@ -258,21 +250,6 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
 
   const updateAnswer = (questionId: string, value: AnswerValue) => {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
-  };
-
-  const updateMatrixCell = (questionId: string, rowId: string, value: string) => {
-    setAnswers((prev) => {
-      const current = (prev[questionId] as MatrixAnswer) || {};
-      return { ...prev, [questionId]: { ...current, [rowId]: value } };
-    });
-  };
-
-  const toggleMultipleChoice = (questionId: string, value: string) => {
-    const current = (answers[questionId] as string[]) || [];
-    const updated = current.includes(value)
-      ? current.filter((v) => v !== value)
-      : [...current, value];
-    updateAnswer(questionId, updated);
   };
 
   const handleEvidenceUpload = async (questionId: string, files: FileList | null) => {
@@ -508,62 +485,7 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
     }
   };
 
-  const renderMatrix = (question: Question) => {
-    const rows = getVisibleMatrixRows(question, answers);
-    const cols = question.matrixColumns ?? question.options ?? [];
-    const matrixVal = (answers[question.id] as MatrixAnswer) || {};
-
-    const handleCell = (rowId: string, colValue: string) => {
-      if (matrixVal[rowId] === colValue) {
-        const next = { ...matrixVal };
-        delete next[rowId];
-        updateAnswer(question.id, next);
-      } else {
-        updateMatrixCell(question.id, rowId, colValue);
-      }
-    };
-
-    return (
-      <div className="space-y-3 overflow-x-auto">
-        <table className="w-full text-sm border-collapse">
-          <thead>
-            <tr>
-              <th className="text-left p-2 border-b" />
-              {cols.map((col) => (
-                <th key={col.value} className="text-center p-2 border-b font-medium">
-                  {pick(col.label, col.labelPt, lang)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.id} className="border-b last:border-0">
-                <td className="p-2 align-top text-muted-foreground">
-                  {pick(row.label, row.labelPt, lang)}
-                </td>
-                {cols.map((col) => (
-                  <td key={col.value} className="p-2 text-center">
-                    <input
-                      type="radio"
-                      name={`${question.id}-${row.id}`}
-                      checked={matrixVal[row.id] === col.value}
-                      onClick={() => handleCell(row.id, col.value)}
-                      onChange={() => handleCell(row.id, col.value)}
-                      className="w-4 h-4 accent-primary cursor-pointer"
-                    />
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  };
-
   const renderQuestion = (question: Question) => {
-    const options = getOrderedOptions(question, answers, accessToken);
     const displayText = formatQuestionText(pick(question.text, question.textPt, lang));
     const flag = reviewFlags[question.id];
     const reviewNote = flag?.corrected ? undefined : flag?.note;
@@ -593,212 +515,24 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
           </div>
         )}
 
-        {question.hint && (
+        {question.hint && question.type !== 'info' && (
           <p className="text-sm text-muted-foreground">
             {pick(question.hint, question.hintPt, lang)}
           </p>
         )}
 
-        {question.type === 'info' && question.hint && (
-          <p className="text-sm bg-muted/50 p-3 rounded-lg">
-            {pick(question.hint, question.hintPt, lang)}
-          </p>
-        )}
-
-        {question.type === 'single' && options.length > 0 && (
-          <div className="grid gap-2">
-            {options.map((option) => {
-              const selected = answers[question.id] === option.value;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() =>
-                    updateAnswer(question.id, selected ? '' : option.value)
-                  }
-                  className={cn(
-                    'flex items-center text-left w-full p-4 rounded-lg border-2 cursor-pointer transition-all',
-                    selected
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:border-primary/50 hover:bg-muted/50'
-                  )}
-                >
-                  <span className="flex-1 text-sm">{pick(option.label, option.labelPt, lang)}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {question.type === 'multiple' && options.length > 0 && (
-          <div className="grid gap-2">
-            {options.map((option) => {
-              const isChecked = ((answers[question.id] as string[]) || []).includes(option.value);
-              return (
-                <label
-                  key={option.value}
-                  className={cn(
-                    'flex items-center space-x-3 p-4 rounded-lg border-2 cursor-pointer transition-all',
-                    isChecked
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:border-primary/50 hover:bg-muted/50'
-                  )}
-                >
-                  <Checkbox
-                    checked={isChecked}
-                    onCheckedChange={() => toggleMultipleChoice(question.id, option.value)}
-                  />
-                  <span className="flex-1 text-sm">{pick(option.label, option.labelPt, lang)}</span>
-                </label>
-              );
-            })}
-          </div>
-        )}
-
-        {question.type === 'text' && (
-          <Input
-            type="text"
-            value={(answers[question.id] as string) || ''}
-            onChange={(e) => updateAnswer(question.id, e.target.value)}
-            placeholder={t('writeAnswer', lang)}
-          />
-        )}
-
-        {question.type === 'longtext' && (
-          <Textarea
-            value={(answers[question.id] as string) || ''}
-            onChange={(e) => updateAnswer(question.id, e.target.value)}
-            placeholder={t('writeAnswer', lang)}
-            className="min-h-[100px]"
-          />
-        )}
-
-        {question.type === 'date' && (
-          <Input
-            type="date"
-            value={(answers[question.id] as string) || ''}
-            onChange={(e) => updateAnswer(question.id, e.target.value)}
-          />
-        )}
-
-        {question.type === 'time' && (
-          <Input
-            type="time"
-            value={(answers[question.id] as string) || ''}
-            onChange={(e) => updateAnswer(question.id, e.target.value)}
-          />
-        )}
-
-        {question.type === 'datetime' && (
-          <DateTimePicker
-            value={(answers[question.id] as string) || ''}
-            onChange={(v) => updateAnswer(question.id, v)}
-          />
-        )}
-
-        {question.type === 'number' && (
-          <Input
-            type="number"
-            inputMode="decimal"
-            min={0}
-            value={(answers[question.id] as string) || ''}
-            onChange={(e) => updateAnswer(question.id, e.target.value)}
-            placeholder={t('writeAnswer', lang)}
-          />
-        )}
-
-        {question.type === 'scale' && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">
-              {pick(question.scaleMinLabel || String(question.scaleMin), question.scaleMinLabelPt, lang)}
-            </span>
-            <div className="flex gap-1 flex-1 justify-center">
-              {Array.from(
-                { length: (question.scaleMax || 5) - (question.scaleMin || 1) + 1 },
-                (_, i) => {
-                  const value = String((question.scaleMin || 1) + i);
-                  return (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() =>
-                        updateAnswer(
-                          question.id,
-                          answers[question.id] === value ? '' : value
-                        )
-                      }
-                      className={cn(
-                        'w-9 h-9 rounded-full border-2 text-sm font-medium transition-all',
-                        answers[question.id] === value
-                          ? 'border-primary bg-primary text-primary-foreground'
-                          : 'border-border hover:border-primary/50'
-                      )}
-                    >
-                      {value}
-                    </button>
-                  );
-                }
-              )}
-            </div>
-            <span className="text-xs text-muted-foreground">
-              {pick(question.scaleMaxLabel || String(question.scaleMax), question.scaleMaxLabelPt, lang)}
-            </span>
-          </div>
-        )}
-
-        {question.type === 'matrix' && renderMatrix(question)}
-
-        {question.type === 'evidence' && (
-          <div className="space-y-3">
-            <label className="block border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors cursor-pointer">
-              <input
-                type="file"
-                className="hidden"
-                multiple
-                onChange={(e) => handleEvidenceUpload(question.id, e.target.files)}
-                disabled={uploading[question.id]}
-              />
-              {uploading[question.id] ? (
-                <Loader2 className="w-8 h-8 mx-auto mb-2 text-muted-foreground animate-spin" />
-              ) : (
-                <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
-              )}
-              <p className="text-sm text-muted-foreground">
-                {uploading[question.id]
-                  ? `${t('uploading', lang)} ${uploadProgress[question.id] || 0}%`
-                  : t('uploadFiles', lang)}
-              </p>
-              {uploading[question.id] && uploadProgress[question.id] > 0 && (
-                <Progress value={uploadProgress[question.id]} className="mt-3 h-2" />
-              )}
-            </label>
-            <div className="grid gap-2">
-              {((answers[question.id] as EvidenceFile[]) || []).map((file) => (
-                <div
-                  key={file.url}
-                  className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30"
-                >
-                  <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <a
-                    href={file.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-1 text-sm truncate hover:underline"
-                  >
-                    {file.name}
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => removeEvidence(question.id, file.url)}
-                    className="text-muted-foreground hover:text-red-500"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        <QuestionInput
+          question={question}
+          value={answers[question.id]}
+          answers={answers}
+          onChange={updateAnswer}
+          lang={lang}
+          optionSeed={accessToken}
+          uploading={uploading[question.id]}
+          uploadProgress={uploadProgress[question.id]}
+          onUploadEvidence={handleEvidenceUpload}
+          onRemoveEvidence={removeEvidence}
+        />
       </div>
     );
   };

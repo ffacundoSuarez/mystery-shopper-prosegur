@@ -199,6 +199,20 @@ export async function adminReviewStage(
   return parseResponse(data as Record<string, unknown>);
 }
 
+/** Mergea respuestas editadas por el admin sin cambiar stages ni status */
+export async function adminUpdateAnswers(
+  responseId: string,
+  answers: Record<string, AnswerValue>
+): Promise<SurveyResponse> {
+  const { data, error } = await supabase.rpc('prosegur_admin_update_answers', {
+    p_passcode: requireOpsPasscode(),
+    p_response_id: responseId,
+    p_answers: answers,
+  });
+  if (error) throw error;
+  return parseResponse(data as Record<string, unknown>);
+}
+
 export async function adminDeletePostulante(responseId: string): Promise<void> {
   const { error } = await supabase.rpc('prosegur_admin_delete_postulante', {
     p_passcode: requireOpsPasscode(),

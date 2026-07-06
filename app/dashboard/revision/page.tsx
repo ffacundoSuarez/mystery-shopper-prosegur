@@ -19,12 +19,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { ResponseDetails } from '@/components/dashboard/ResponseDetails';
-import { adminGetResponses, adminReviewStage, adminUnlockSurvey } from '@/lib/data';
+import {
+  ResponseDetails,
+  REVISION_STATUS_LABELS,
+  STAGE_STATUS_COLORS,
+} from '@/components/dashboard/ResponseDetails';
+import {
+  adminGetResponses,
+  adminReviewStage,
+  adminUnlockSurvey,
+  adminUpdateAnswers,
+} from '@/lib/data';
 import { getSectionTitle, REVIEWABLE_SECTIONS } from '@/lib/survey-config';
-import { SurveyResponse } from '@/lib/types';
+import { AnswerValue, StageStatus, SurveyResponse } from '@/lib/types';
 import { Eye, Building2, MapPin, Clock, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 function displayName(r: SurveyResponse) {
   return (
@@ -40,24 +50,32 @@ function pendingStageIds(r: SurveyResponse): string[] {
   );
 }
 
+function getStageBadgeLabel(sectionId: string, status: StageStatus): string {
+  const title = getSectionTitle(sectionId);
+  const statusLabel = REVISION_STATUS_LABELS[status] || status;
+  return `${title} · ${statusLabel}`;
+}
+
 export default function RevisionPage() {
   const [responses, setResponses] = useState<SurveyResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<SurveyResponse | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [saveLoading, setSaveLoading] = useState(false);
   const [unlockLoading, setUnlockLoading] = useState(false);
   const [filterNombre, setFilterNombre] = useState('');
   const [filterEmpresa, setFilterEmpresa] = useState('');
   const [filterId, setFilterId] = useState('');
   const [filterEtapa, setFilterEtapa] = useState('all');
+  const [filterEstado, setFilterEstado] = useState('all');
 
   const load = async () => {
     try {
       const all = await adminGetResponses();
-      setResponses(all.filter((r) => pendingStageIds(r).length > 0));
+      setResponses(all);
     } catch {
-      toast.error('Error al cargar revisiones pendientes');
+      toast.error('Error al cargar postulantes');
     } finally {
       setLoading(false);
     }
@@ -75,18 +93,25 @@ export default function RevisionPage() {
     return responses.filter((r) => {
       const name = displayName(r).toLowerCase();
       const codeOrId = (r.code || r.id).toLowerCase();
-      const pending = pendingStageIds(r);
+      const stageEntries = REVIEWABLE_SECTIONS.map((sectionId) => ({
+        sectionId,
+        status: r.stages?.[sectionId]?.status as StageStatus | undefined,
+      })).filter((e) => e.status);
 
       const matchesNombre = !nombre || name.includes(nombre);
       const matchesEmpresa = !empresa || (r.empresa || '').toLowerCase().includes(empresa);
       const matchesId =
         !id || codeOrId.includes(id) || r.id.toLowerCase().includes(id);
       const matchesEtapa =
-        filterEtapa === 'all' || pending.includes(filterEtapa);
+        filterEtapa === 'all' ||
+        stageEntries.some((e) => e.sectionId === filterEtapa);
+      const matchesEstado =
+        filterEstado === 'all' ||
+        stageEntries.some((e) => e.status === filterEstado);
 
-      return matchesNombre && matchesEmpresa && matchesId && matchesEtapa;
+      return matchesNombre && matchesEmpresa && matchesId && matchesEtapa && matchesEstado;
     });
-  }, [responses, filterNombre, filterEmpresa, filterId, filterEtapa]);
+  }, [responses, filterNombre, filterEmpresa, filterId, filterEtapa, filterEstado]);
 
   const filteredPendingStages = useMemo(
     () => filteredResponses.reduce((sum, r) => sum + pendingStageIds(r).length, 0),
@@ -110,27 +135,36 @@ export default function RevisionPage() {
         reviewFlags
       );
       setSelected(updated);
-
-      const stillPending = pendingStageIds(updated).length > 0;
-      setResponses((prev) => {
-        const without = prev.filter((r) => r.id !== updated.id);
-        return stillPending ? [updated, ...without] : without;
-      });
+      setResponses((prev) =>
+        prev.map((r) => (r.id === updated.id ? updated : r))
+      );
 
       toast.success(
         action === 'aprobar'
           ? `Etapa "${getSectionTitle(sectionId)}" aprobada`
           : `Correcciones enviadas en "${getSectionTitle(sectionId)}"`
       );
-
-      if (!stillPending) {
-        setDetailsOpen(false);
-        setSelected(null);
-      }
     } catch {
       toast.error('No se pudo procesar la revisión');
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  const handleSaveAnswers = async (answersDiff: Record<string, AnswerValue>) => {
+    if (!selected) return;
+    setSaveLoading(true);
+    try {
+      const updated = await adminUpdateAnswers(selected.id, answersDiff);
+      setSelected(updated);
+      setResponses((prev) =>
+        prev.map((r) => (r.id === updated.id ? updated : r))
+      );
+      toast.success('Respuestas guardadas');
+    } catch {
+      toast.error('No se pudieron guardar las respuestas');
+    } finally {
+      setSaveLoading(false);
     }
   };
 
@@ -164,7 +198,7 @@ export default function RevisionPage() {
           <p className="text-muted-foreground text-sm">
             {loading
               ? 'Cargando...'
-              : `${filteredResponses.length} de ${responses.length} postulante${responses.length !== 1 ? 's' : ''} · ${filteredPendingStages} etapa${filteredPendingStages !== 1 ? 's' : ''} para revisar`}
+              : `${filteredResponses.length} de ${responses.length} postulante${responses.length !== 1 ? 's' : ''} · ${filteredPendingStages} etapa${filteredPendingStages !== 1 ? 's' : ''} pendiente${filteredPendingStages !== 1 ? 's' : ''} de revisar`}
           </p>
         </div>
 
@@ -200,6 +234,18 @@ export default function RevisionPage() {
               ))}
             </SelectContent>
           </Select>
+          <Select value={filterEstado} onValueChange={setFilterEstado}>
+            <SelectTrigger className="h-9 w-full sm:w-40">
+              <SelectValue placeholder="Estado" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los estados</SelectItem>
+              <SelectItem value="en_revision">En revisión</SelectItem>
+              <SelectItem value="aprobada">Aprobada</SelectItem>
+              <SelectItem value="rechazada">Rechazada</SelectItem>
+              <SelectItem value="pendiente">Pendiente</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -210,9 +256,9 @@ export default function RevisionPage() {
       ) : responses.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
-            <h3 className="text-lg font-medium mb-1">¡Todo revisado!</h3>
+            <h3 className="text-lg font-medium mb-1">Sin postulantes</h3>
             <p className="text-muted-foreground text-center">
-              No hay postulantes con etapas pendientes de revisión.
+              No hay postulantes registrados en el sistema.
             </p>
           </CardContent>
         </Card>
@@ -227,7 +273,12 @@ export default function RevisionPage() {
       ) : (
         <div className="grid gap-3">
           {filteredResponses.map((response) => {
-            const pending = pendingStageIds(response);
+            const stageBadges = REVIEWABLE_SECTIONS.map((sectionId) => {
+              const status = response.stages?.[sectionId]?.status as StageStatus | undefined;
+              if (!status) return null;
+              return { sectionId, status };
+            }).filter(Boolean) as { sectionId: string; status: StageStatus }[];
+
             return (
               <Card key={response.id} className="hover:shadow-md transition-shadow">
                 <CardContent className="p-4">
@@ -241,15 +292,24 @@ export default function RevisionPage() {
                       </div>
 
                       <div className="flex flex-wrap gap-1.5">
-                        {pending.map((sectionId) => (
-                          <Badge
-                            key={sectionId}
-                            variant="outline"
-                            className="text-xs py-0.5 bg-amber-50 text-amber-700 border-amber-200"
-                          >
-                            {getSectionTitle(sectionId)} · Revisar
+                        {stageBadges.length > 0 ? (
+                          stageBadges.map(({ sectionId, status }) => (
+                            <Badge
+                              key={sectionId}
+                              variant="outline"
+                              className={cn(
+                                'text-xs py-0.5',
+                                STAGE_STATUS_COLORS[status]
+                              )}
+                            >
+                              {getStageBadgeLabel(sectionId, status)}
+                            </Badge>
+                          ))
+                        ) : (
+                          <Badge variant="outline" className="text-xs py-0.5 text-muted-foreground">
+                            Sin etapas iniciadas
                           </Badge>
-                        ))}
+                        )}
                       </div>
 
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -308,13 +368,16 @@ export default function RevisionPage() {
               response={selected}
               mode="revision"
               showStageActions
+              allowEditAnswers
               actionLoading={actionLoading}
+              saveLoading={saveLoading}
               unlockLoading={unlockLoading}
               onUnlockSurvey={handleUnlockSurvey}
               onApproveStage={(sectionId) => handleReview(sectionId, 'aprobar')}
               onSendCorrections={(sectionId, flags) =>
                 handleReview(sectionId, 'rechazar', flags)
               }
+              onSaveAnswers={handleSaveAnswers}
             />
           )}
         </DialogContent>
