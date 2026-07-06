@@ -52,6 +52,13 @@ export function getAnswerLabel(questionId: string, value: AnswerValue): string {
   const question = findQuestion(questionId);
   if (!question) return String(value);
 
+  // Fecha y hora: mostrar "dd/mm/aaaa hh:mm" en vez del formato ISO
+  if (question.type === 'datetime' && typeof value === 'string') {
+    const [datePart = '', timePart = ''] = value.split('T');
+    const dateStr = datePart ? datePart.split('-').reverse().join('/') : '';
+    return [dateStr, timePart].filter(Boolean).join(' ') || '-';
+  }
+
   if (isMatrixAnswer(value)) {
     const rows = question.matrixRows ?? [];
     const cols = question.matrixColumns ?? question.options ?? [];

@@ -33,6 +33,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
+import { DateTimePicker } from '@/components/survey/DateTimePicker';
 import {
   ChevronLeft,
   ChevronRight,
@@ -688,11 +689,21 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
           />
         )}
 
+        {question.type === 'datetime' && (
+          <DateTimePicker
+            value={(answers[question.id] as string) || ''}
+            onChange={(v) => updateAnswer(question.id, v)}
+          />
+        )}
+
         {question.type === 'number' && (
           <Input
             type="number"
+            inputMode="decimal"
+            min={0}
             value={(answers[question.id] as string) || ''}
             onChange={(e) => updateAnswer(question.id, e.target.value)}
+            placeholder={t('writeAnswer', lang)}
           />
         )}
 
