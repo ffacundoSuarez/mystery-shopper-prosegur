@@ -48,6 +48,7 @@ export interface Question {
     | 'longtext'
     | 'date'
     | 'time'
+    | 'datetime'
     | 'number'
     | 'scale'
     | 'evidence'
