@@ -10,7 +10,7 @@ import {
   REGION_PRY,
   REGION_URY,
 } from './survey-config/constants';
-import { getSectionTitle } from './survey-config';
+import { getSectionTitle, allStagesApproved } from './survey-config';
 import { AnswerValue, QuestionOption, StageStatus, StagesMap } from './types';
 
 const CATEGORIA_LABELS: Record<string, string> = {
@@ -103,7 +103,7 @@ export function getPartProgressLabel(
   stages: StagesMap = {},
   answers: Record<string, AnswerValue> = {}
 ): string {
-  if (answers['encuesta-cerrada'] === 'si') return 'Encuesta cerrada';
+  if (allStagesApproved(stages)) return 'Encuesta completa';
 
   const partIds = ['parte-1', 'parte-2', 'parte-3'] as const;
   let lastActive = -1;

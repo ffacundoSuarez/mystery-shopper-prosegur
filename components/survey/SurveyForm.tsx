@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   surveySections,
   getResumeSectionIndex,
@@ -64,6 +64,23 @@ function sectionAnswersEqual(
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+/** Serializa una respuesta para comparar cambios en modo corrección */
+function serializeAnswer(value: AnswerValue | undefined): string {
+  return JSON.stringify(value ?? null);
+}
+
+/** Baseline inicial de las preguntas marcadas a revisar */
+function buildCorrectionBaseline(
+  questionIds: string[],
+  source: Record<string, AnswerValue>
+): Record<string, string> {
+  const baseline: Record<string, string> = {};
+  for (const qId of questionIds) {
+    baseline[qId] = serializeAnswer(source[qId]);
+  }
+  return baseline;
+}
+
 export function SurveyForm({ accessToken }: { accessToken: string }) {
   const [currentSection, setCurrentSection] = useState(0);
   const [currentModuleIndex, setCurrentModuleIndex] = useState(0);
@@ -81,6 +98,8 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
   const [reviewFlags, setReviewFlags] = useState<ReviewFlagsMap>({});
   const [reviewNavIndex, setReviewNavIndex] = useState(0);
   const [correctionMode, setCorrectionMode] = useState(false);
+  const [correctionBaseline, setCorrectionBaseline] = useState<Record<string, string>>({});
+  const correctionJumpRef = useRef(false);
 
   const isFinalized = answers['proceso-finalizado'] === 'si';
   const section = surveySections[currentSection];
@@ -94,6 +113,18 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
   );
 
   const hasActiveCorrections = orderedReviewIds.length > 0;
+
+  const correctionsModifiedCount = useMemo(() => {
+    if (!hasActiveCorrections) return 0;
+    return orderedReviewIds.filter(
+      (qId) => serializeAnswer(answers[qId]) !== correctionBaseline[qId]
+    ).length;
+  }, [answers, correctionBaseline, orderedReviewIds, hasActiveCorrections]);
+
+  const allCorrectionsModified =
+    hasActiveCorrections &&
+    orderedReviewIds.length > 0 &&
+    correctionsModifiedCount === orderedReviewIds.length;
 
   const visibleModules = useMemo(
     () => getSectionModules(section, answers),
@@ -109,7 +140,6 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
   }, [currentModuleIndex, visibleModules.length]);
 
   const totalSections = surveySections.length;
-  const sectionProgress = ((currentSection + 1) / totalSections) * 100;
 
   const nextSectionTitle = useMemo(() => {
     const nextId = getNextReviewableSection(sectionId);
@@ -177,8 +207,11 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
           if (reviewIds.length > 0) {
             const loc = locateQuestion(reviewIds[0], ans);
             if (loc) {
+              correctionJumpRef.current = true;
+              setCorrectionBaseline(buildCorrectionBaseline(reviewIds, ans));
               setCurrentSection(loc.sectionIndex);
               setCurrentModuleIndex(loc.moduleIndex);
+              setReviewNavIndex(0);
               setCorrectionMode(true);
               setShowStageGate(false);
             }
@@ -203,7 +236,11 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
 
   useEffect(() => {
     if (loading) return;
-    setCurrentModuleIndex(0);
+    if (correctionJumpRef.current) {
+      correctionJumpRef.current = false;
+    } else {
+      setCurrentModuleIndex(0);
+    }
     setSectionBaseline(getSectionAnswers(sectionId, answers));
     if (isReviewable) {
       const status = stages[sectionId]?.status;
@@ -360,7 +397,6 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
         );
         setStages(updated.stages || {});
         setAnswers(updated.answers || {});
-        setSectionBaseline(getSectionAnswers(sectionId, updated.answers || {}));
         advanceToNextModule();
       } catch {
         toast.error(t('saveError', lang));
@@ -371,18 +407,20 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
     }
 
     if (shouldSubmitForReview) {
-      await saveCurrentSection(true, true);
+      await saveCurrentSection(false, true);
       return;
     }
 
-    // En modo "ver respuestas", Siguiente no avanza a la siguiente parte
+    // En modo "ver respuestas", volver al resumen de la parte
     if (isBrowsingApprovedSection) {
       setShowStageGate(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
-    advanceToNextSection();
+    // Último módulo: mostrar pantalla de estado/revisión, nunca saltar a la siguiente parte
+    setShowStageGate(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const goToPrevious = () => {
@@ -421,12 +459,52 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
     if (!qId) return;
     const loc = locateQuestion(qId, answers);
     if (!loc) return;
+    correctionJumpRef.current = true;
     setReviewNavIndex(index);
     setCurrentSection(loc.sectionIndex);
     setCurrentModuleIndex(loc.moduleIndex);
     setCorrectionMode(true);
     setShowStageGate(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  /** Reenvía a revisión todas las partes con correcciones modificadas */
+  const submitAllCorrections = async () => {
+    if (!allCorrectionsModified || saving) return;
+    setSaving(true);
+    try {
+      const sectionIds = [
+        ...new Set(
+          orderedReviewIds
+            .map((qId) => reviewFlags[qId]?.sectionId)
+            .filter((id): id is string => Boolean(id))
+        ),
+      ];
+
+      let updated;
+      for (const secId of sectionIds) {
+        updated = await saveStageByToken(
+          accessToken,
+          secId,
+          getSectionAnswers(secId),
+          true
+        );
+      }
+
+      if (updated) {
+        setStages(updated.stages || {});
+        setAnswers(updated.answers || {});
+        setReviewFlags(updated.reviewFlags || {});
+        setCorrectionBaseline({});
+        setCorrectionMode(false);
+        setShowStageGate(true);
+        toast.success(t('correctionsSent', lang));
+      }
+    } catch {
+      toast.error(t('saveError', lang));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const renderMatrix = (question: Question) => {
@@ -486,7 +564,8 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
   const renderQuestion = (question: Question) => {
     const options = getOrderedOptions(question, answers, accessToken);
     const displayText = formatQuestionText(pick(question.text, question.textPt, lang));
-    const reviewNote = reviewFlags[question.id]?.note;
+    const flag = reviewFlags[question.id];
+    const reviewNote = flag?.corrected ? undefined : flag?.note;
     const hasReviewFlag = Boolean(reviewNote);
 
     return (
@@ -786,7 +865,7 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
         <div className="flex flex-col sm:flex-row gap-2">
           {nextSectionTitle && currentStageStatus !== 'rechazada' && (
             <Button onClick={goToNextStage} className="flex-1">
-              {t('goTo', lang)}: {nextSectionTitle}
+              {t('startPart', lang)} {nextSectionTitle}
               <ChevronRight className="w-4 h-4 ml-2" />
             </Button>
           )}
@@ -805,31 +884,47 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
     const total = orderedReviewIds.length;
 
     return (
-      <div className="fixed top-20 left-1/2 -translate-x-1/2 z-20 max-w-sm w-[calc(100%-2rem)]">
-        <div className="flex items-center justify-between gap-2 rounded-full border bg-background/95 backdrop-blur shadow-lg px-3 py-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 shrink-0"
-            disabled={reviewNavIndex <= 0}
-            onClick={() => goToReviewQuestion(reviewNavIndex - 1)}
-            title={t('prevCorrection', lang)}
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </Button>
-          <span className="text-sm font-medium text-center flex-1">
-            {t('correction', lang)} {current}/{total}
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 shrink-0"
-            disabled={reviewNavIndex >= total - 1}
-            onClick={() => goToReviewQuestion(reviewNavIndex + 1)}
-            title={t('nextCorrection', lang)}
-          >
-            <ChevronRight className="w-4 h-4" />
-          </Button>
+      <div className="fixed top-20 left-1/2 -translate-x-1/2 z-20 max-w-md w-[calc(100%-2rem)]">
+        <div className="rounded-2xl border bg-background/95 backdrop-blur shadow-lg px-3 py-2 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0"
+              disabled={reviewNavIndex <= 0}
+              onClick={() => goToReviewQuestion(reviewNavIndex - 1)}
+              title={t('prevCorrection', lang)}
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <span className="text-sm font-medium text-center flex-1">
+              {t('correction', lang)} {current}/{total}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0"
+              disabled={reviewNavIndex >= total - 1}
+              onClick={() => goToReviewQuestion(reviewNavIndex + 1)}
+              title={t('nextCorrection', lang)}
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+          {allCorrectionsModified ? (
+            <Button
+              className="w-full"
+              onClick={submitAllCorrections}
+              disabled={saving}
+            >
+              {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              {t('submitCorrections', lang)}
+            </Button>
+          ) : (
+            <p className="text-xs text-center text-muted-foreground px-1">
+              {t('correctionsProgress', lang)} {correctionsModifiedCount}/{total}
+            </p>
+          )}
         </div>
       </div>
     );
@@ -843,8 +938,9 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
     );
   }
 
-  if (surveyThankYou) return renderThankYouScreen();
-  if (isFinalized) return renderFinalizedScreen();
+  // Priorizar correcciones pendientes sobre pantallas de cierre
+  if (surveyThankYou && !hasActiveCorrections) return renderThankYouScreen();
+  if (isFinalized && !hasActiveCorrections) return renderFinalizedScreen();
 
   const hideForm = showStageGate && (currentStageStatus === 'aprobada' || currentStageStatus === 'en_revision');
   const showBottomNext = !hideForm;
@@ -870,7 +966,7 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
                 </span>
               )}
             </span>
-            <span className="text-muted-foreground">{Math.round(sectionProgress)}%</span>
+            <span className="text-muted-foreground">{Math.round(moduleProgress)}%</span>
           </div>
           <Progress value={moduleProgress} className="h-2" />
         </div>

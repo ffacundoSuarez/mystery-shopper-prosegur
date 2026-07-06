@@ -153,7 +153,14 @@ export function ResponseDetails({
     (response.answers['fecha-fin'] as string) || response.fechaFin || '';
 
   useEffect(() => {
-    setDraftFlags(response.reviewFlags || {});
+    const flags = response.reviewFlags || {};
+    const active: ReviewFlagsMap = {};
+    for (const [qId, flag] of Object.entries(flags)) {
+      if (!flag.corrected) {
+        active[qId] = flag;
+      }
+    }
+    setDraftFlags(active);
   }, [response.id, response.reviewFlags]);
 
   const reviewableSectionIds =
@@ -218,6 +225,8 @@ export function ResponseDetails({
         )}
         <div className="grid gap-3">
           {questions.map((question) => {
+            const storedFlag = response.reviewFlags?.[question.id];
+            const wasCorrected = storedFlag?.corrected === true;
             const isMarked = Boolean(draftFlags[question.id]);
             const note = draftFlags[question.id]?.note || '';
 
@@ -226,6 +235,7 @@ export function ResponseDetails({
                 key={question.id}
                 className={cn(
                   'grid grid-cols-1 gap-3 py-3 border-b last:border-0',
+                  wasCorrected && 'rounded-lg border border-green-200 bg-green-50/50 p-3 -mx-1',
                   isMarked && canMarkReview && 'rounded-lg border border-amber-200 bg-amber-50/40 p-3 -mx-1'
                 )}
               >
@@ -238,7 +248,19 @@ export function ResponseDetails({
                   </div>
                 </div>
 
-                {canMarkReview && (
+                {wasCorrected && storedFlag?.note && (
+                  <div className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm space-y-1.5">
+                    <Badge
+                      variant="outline"
+                      className="bg-green-100 text-green-800 border-green-300"
+                    >
+                      Marcada a revisar → Ya corregida
+                    </Badge>
+                    <p className="text-green-900/90 whitespace-pre-wrap">{storedFlag.note}</p>
+                  </div>
+                )}
+
+                {canMarkReview && !wasCorrected && (
                   <div className="space-y-2 pl-1">
                     <label className="flex items-center gap-2 text-sm cursor-pointer">
                       <Checkbox

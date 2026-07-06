@@ -79,25 +79,50 @@ export const REGION_DEU: QuestionOption[] = [
   { value: 'otro', label: 'Otro', labelPt: 'Outro' },
 ];
 
-/** Marcas F3 filtradas por país (rotate en la pregunta) */
+/** Opciones de región por código de país (F1) */
+export const REGION_OPTIONS_BY_PAIS: Record<string, QuestionOption[]> = {
+  '1': REGION_ARG,
+  '2': REGION_COL,
+  '3': REGION_PER,
+  '4': REGION_CHI,
+  '5': REGION_PRY,
+  '6': REGION_URY,
+  '7': REGION_POR,
+  '8': REGION_DEU,
+};
+
+/** Clave de respuesta F2 por código de país */
+export const REGION_KEY_BY_PAIS: Record<string, string> = {
+  '1': 'f2a-region',
+  '2': 'f2b-region',
+  '3': 'f2c-region',
+  '4': 'f2d-region',
+  '5': 'f2e-region',
+  '6': 'f2f-region',
+  '7': 'f2g-region',
+  '8': 'f2h-region',
+};
+
+/** Marcas F3 filtradas por país según tabla del wording (rotate en la pregunta) */
 export const MARCAS: QuestionOption[] = [
-  { value: '1', label: 'ADT', labelPt: 'ADT', showIf: pais('1', '2', '3') },
-  { value: '2', label: 'Verisure', labelPt: 'Verisure', showIf: pais('1', '2', '3', '4') },
-  { value: '3', label: 'Telesentinel', labelPt: 'Telesentinel', showIf: pais('1') },
-  { value: '4', label: 'Alarmar', labelPt: 'Alarmar', showIf: pais('1') },
-  { value: '5', label: 'Atlas', labelPt: 'Atlas', showIf: pais('1') },
-  { value: '6', label: 'Securitas', labelPt: 'Securitas', showIf: pais('1') },
-  { value: '7', label: 'Protek', labelPt: 'Protek', showIf: pais('1') },
-  { value: '8', label: 'Nos Securitas', labelPt: 'Nos Securitas', showIf: pais('1') },
-  { value: '9', label: 'Securitas Direct – Verisure', labelPt: 'Securitas Direct – Verisure', showIf: pais('1') },
-  { value: '10', label: 'Maxima', labelPt: 'Maxima', showIf: pais('1') },
-  { value: '11', label: 'Prosegur', labelPt: 'Prosegur', showIf: pais('1', '2', '3', '4', '5', '6', '7', '8') },
-  { value: '12', label: 'Secu24', labelPt: 'Secu24', showIf: pais('1') },
+  { value: '1', label: 'ADT', labelPt: 'ADT', showIf: pais('1', '4', '6') },
+  { value: '2', label: 'Verisure', labelPt: 'Verisure', showIf: pais('1', '3', '4', '8') },
+  { value: '3', label: 'Telesentinel', labelPt: 'Telesentinel', showIf: pais('2') },
+  // Sin X en ningún país en el wording — ocultas hasta definir disponibilidad
+  { value: '4', label: 'Alarmar', labelPt: 'Alarmar', showIf: pais('0') },
+  { value: '5', label: 'Atlas', labelPt: 'Atlas', showIf: pais('0') },
+  { value: '6', label: 'Securitas', labelPt: 'Securitas', showIf: pais('8') },
+  { value: '7', label: 'Protek', labelPt: 'Protek', showIf: pais('5') },
+  { value: '8', label: 'Nos Securitas', labelPt: 'Nos Securitas', showIf: pais('0') },
+  { value: '9', label: 'Securitas Direct – Verisure', labelPt: 'Securitas Direct – Verisure', showIf: pais('7') },
+  { value: '10', label: 'Maxima', labelPt: 'Maxima', showIf: pais('0') },
+  { value: '11', label: 'Prosegur', labelPt: 'Prosegur', showIf: pais('1', '2', '3', '4', '5', '6', '7') },
+  { value: '12', label: 'Secu24', labelPt: 'Secu24', showIf: pais('8') },
   {
     value: '13',
     label: 'Otra (especificar)',
     labelPt: 'Outra (especificar)',
-    showIf: pais('1', '2', '3', '4', '5', '6', '7', '8'),
+    showIf: pais('8'),
   },
 ];
 

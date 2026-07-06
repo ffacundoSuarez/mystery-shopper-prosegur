@@ -116,6 +116,9 @@ export type StagesMap = Record<string, StageInfo>;
 export interface ReviewFlag {
   note: string;
   sectionId: string;
+  /** true cuando el shopper reenvió correcciones de esta pregunta */
+  corrected?: boolean;
+  correctedAt?: string;
 }
 
 export type ReviewFlagsMap = Record<string, ReviewFlag>;

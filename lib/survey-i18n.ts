@@ -29,6 +29,7 @@ const UI: Record<string, Record<Lang, string>> = {
   stageIs: { es: 'está', pt: 'está' },
   completeNext: { es: 'Complete la siguiente parte cuando corresponda.', pt: 'Complete a parte seguinte quando corresponder.' },
   goTo: { es: 'Ir a', pt: 'Ir para' },
+  startPart: { es: 'Iniciar', pt: 'Iniciar' },
   viewAnswers: { es: 'Ver respuestas', pt: 'Ver respostas' },
   writeAnswer: { es: 'Escriba su respuesta...', pt: 'Escreva a sua resposta...' },
   uploadFiles: { es: 'Clic para subir archivos', pt: 'Clique para enviar ficheiros' },
@@ -43,6 +44,15 @@ const UI: Record<string, Record<Lang, string>> = {
   prevCorrection: { es: 'Corrección anterior', pt: 'Correção anterior' },
   nextCorrection: { es: 'Siguiente corrección', pt: 'Correção seguinte' },
   backToSummary: { es: 'Volver al resumen', pt: 'Voltar ao resumo' },
+  submitCorrections: {
+    es: 'Enviar respuestas a revisión',
+    pt: 'Enviar respostas para revisão',
+  },
+  correctionsSent: {
+    es: 'Respuestas modificadas enviadas a revisión',
+    pt: 'Respostas modificadas enviadas para revisão',
+  },
+  correctionsProgress: { es: 'Corregidas', pt: 'Corrigidas' },
 };
 
 export function t(key: keyof typeof UI, lang: Lang): string {
