@@ -51,7 +51,6 @@ import {
   Unlock,
   Loader2,
   Pencil,
-  X,
   Save,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -231,6 +230,18 @@ export function ResponseDetails({
     });
   };
 
+  /** Cierra edición y revierte al valor guardado en servidor */
+  const cancelEditing = (questionId: string) => {
+    const saved = response.answers?.[questionId];
+    setEditedAnswers((prev) => {
+      const next = { ...prev };
+      if (saved !== undefined) next[questionId] = saved;
+      else delete next[questionId];
+      return next;
+    });
+    toggleEditing(questionId, false);
+  };
+
   const handleEvidenceUpload = async (questionId: string, files: FileList | null) => {
     if (!files || files.length === 0) return;
     setUploading((p) => ({ ...p, [questionId]: true }));
@@ -328,7 +339,7 @@ export function ResponseDetails({
         {module.description && (
           <p className="text-sm text-muted-foreground">{module.description}</p>
         )}
-        <div className="grid gap-3">
+        <div className="divide-y divide-border">
           {questions.map((question) => {
             const storedFlag = response.reviewFlags?.[question.id];
             const wasCorrected = storedFlag?.corrected === true;
@@ -336,22 +347,103 @@ export function ResponseDetails({
             const note = draftFlags[question.id]?.note || '';
             const isEditing = editingIds.has(question.id);
             const questionChanged = question.id in answersDiff;
+            const showEditControls = canEdit && question.type !== 'info';
+
+            const dominantBorder =
+              wasCorrected
+                ? 'border-l-2 border-l-green-400 pl-3'
+                : isMarked && canMarkReview
+                ? 'border-l-2 border-l-amber-400 pl-3'
+                : '';
 
             return (
               <div
                 key={question.id}
-                className={cn(
-                  'grid grid-cols-1 gap-3 py-3 border-b last:border-0',
-                  wasCorrected && 'rounded-lg border border-green-200 bg-green-50/50 p-3 -mx-1',
-                  isMarked && canMarkReview && 'rounded-lg border border-amber-200 bg-amber-50/40 p-3 -mx-1',
-                  questionChanged && 'rounded-lg border border-blue-200 bg-blue-50/30 p-3 -mx-1'
-                )}
+                className={cn('py-4 first:pt-0 last:pb-0 space-y-2', dominantBorder)}
               >
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-                  <span className="text-sm text-muted-foreground leading-relaxed">
-                    {formatQuestionText(question.text)}
-                  </span>
-                  <div className="space-y-2">
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {formatQuestionText(question.text)}
+                </p>
+
+                {wasCorrected && storedFlag?.note && (
+                  <div className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm space-y-1.5">
+                    <Badge
+                      variant="outline"
+                      className="bg-green-100 text-green-800 border-green-300"
+                    >
+                      Marcada a revisar → Ya corregida
+                    </Badge>
+                    <p className="text-green-900/90 whitespace-pre-wrap">{storedFlag.note}</p>
+                  </div>
+                )}
+
+                <div
+                  className={cn(
+                    'rounded-lg border bg-muted/40 overflow-hidden',
+                    questionChanged && 'border-blue-300',
+                    !questionChanged && wasCorrected && 'border-green-200',
+                    !questionChanged &&
+                      isMarked &&
+                      canMarkReview &&
+                      !wasCorrected &&
+                      'border-amber-200'
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border/60 bg-muted/20">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Respuesta
+                      </span>
+                      {questionChanged && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] py-0 h-5 bg-blue-50 text-blue-800 border-blue-200"
+                        >
+                          Sin guardar
+                        </Badge>
+                      )}
+                    </div>
+                    {showEditControls && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        {isEditing ? (
+                          <>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs"
+                              onClick={() => cancelEditing(question.id)}
+                            >
+                              Cancelar
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 px-2 text-xs"
+                              onClick={() => toggleEditing(question.id, false)}
+                            >
+                              <Check className="w-3.5 h-3.5 mr-1" />
+                              Listo
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => toggleEditing(question.id, true)}
+                          >
+                            <Pencil className="w-3.5 h-3.5 mr-1" />
+                            Editar
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-3">
                     {isEditing ? (
                       <QuestionInput
                         question={question}
@@ -374,69 +466,48 @@ export function ResponseDetails({
                         )}
                       </div>
                     )}
-                    {canEdit && question.type !== 'info' && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 px-2 text-xs"
-                        onClick={() => toggleEditing(question.id, !isEditing)}
-                      >
-                        {isEditing ? (
-                          <>
-                            <X className="w-3.5 h-3.5 mr-1" />
-                            Cancelar edición
-                          </>
-                        ) : (
-                          <>
-                            <Pencil className="w-3.5 h-3.5 mr-1" />
-                            Editar respuesta
-                          </>
-                        )}
-                      </Button>
-                    )}
                   </div>
                 </div>
 
-                {wasCorrected && storedFlag?.note && (
-                  <div className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm space-y-1.5">
-                    <Badge
-                      variant="outline"
-                      className="bg-green-100 text-green-800 border-green-300"
-                    >
-                      Marcada a revisar → Ya corregida
-                    </Badge>
-                    <p className="text-green-900/90 whitespace-pre-wrap">{storedFlag.note}</p>
-                  </div>
-                )}
-
-                {canMarkReview && !wasCorrected && (
-                  <div className="space-y-2 pl-1">
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                {canMarkReview && !wasCorrected && !isEditing && (
+                  <div className="space-y-2 pt-1">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer w-fit">
                       <Checkbox
                         checked={isMarked}
                         onCheckedChange={(checked) =>
                           toggleQuestionFlag(question.id, sectionId, checked === true)
                         }
                       />
-                      <span className="font-medium">Marcar a revisar</span>
+                      <span className="font-medium text-muted-foreground">
+                        Marcar a revisar
+                      </span>
                     </label>
-                    {isMarked && (
-                      <div className="space-y-1.5">
-                        <Label htmlFor={`note-${question.id}`} className="text-xs text-muted-foreground">
-                          Observación para el shopper
-                        </Label>
-                        <Textarea
-                          id={`note-${question.id}`}
-                          value={note}
-                          onChange={(e) =>
-                            updateQuestionNote(question.id, sectionId, e.target.value)
-                          }
-                          placeholder="Ej: Sea más explícito en la respuesta..."
-                          className="min-h-[72px] text-sm"
-                        />
+                    <div
+                      className={cn(
+                        'grid transition-[grid-template-rows] duration-200 ease-out',
+                        isMarked ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+                      )}
+                    >
+                      <div className="overflow-hidden">
+                        <div className="space-y-1.5 pt-1">
+                          <Label
+                            htmlFor={`note-${question.id}`}
+                            className="text-xs text-muted-foreground"
+                          >
+                            Observación para el shopper
+                          </Label>
+                          <Textarea
+                            id={`note-${question.id}`}
+                            value={note}
+                            onChange={(e) =>
+                              updateQuestionNote(question.id, sectionId, e.target.value)
+                            }
+                            placeholder="Ej: Sea más explícito en la respuesta..."
+                            className="min-h-[72px] text-sm"
+                          />
+                        </div>
                       </div>
-                    )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -568,25 +639,27 @@ export function ResponseDetails({
   return (
     <div className="space-y-5">
       {canEdit && hasUnsavedChanges && (
-        <div className="rounded-xl border border-blue-300 bg-blue-50/50 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <p className="text-sm text-blue-900">
-            Hay {Object.keys(answersDiff).length} respuesta
-            {Object.keys(answersDiff).length !== 1 ? 's' : ''} modificada
-            {Object.keys(answersDiff).length !== 1 ? 's' : ''} sin guardar.
-          </p>
-          <Button
-            size="sm"
-            className="bg-blue-600 hover:bg-blue-700 shrink-0"
-            disabled={saveLoading}
-            onClick={handleSaveAnswers}
-          >
-            {saveLoading ? (
-              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-            ) : (
-              <Save className="w-4 h-4 mr-1" />
-            )}
-            Guardar todos los cambios
-          </Button>
+        <div className="sticky top-0 z-10 -mx-1 px-1 pb-2 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+          <div className="rounded-xl border border-blue-300 bg-blue-50/80 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm">
+            <p className="text-sm text-blue-900">
+              Hay {Object.keys(answersDiff).length} respuesta
+              {Object.keys(answersDiff).length !== 1 ? 's' : ''} modificada
+              {Object.keys(answersDiff).length !== 1 ? 's' : ''} sin guardar.
+            </p>
+            <Button
+              size="sm"
+              className="bg-blue-600 hover:bg-blue-700 shrink-0"
+              disabled={saveLoading}
+              onClick={handleSaveAnswers}
+            >
+              {saveLoading ? (
+                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4 mr-1" />
+              )}
+              Guardar todos los cambios
+            </Button>
+          </div>
         </div>
       )}
 
