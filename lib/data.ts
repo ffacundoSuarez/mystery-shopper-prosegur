@@ -138,15 +138,17 @@ export async function getPublicResults(): Promise<PublicResult[]> {
 // --- Admin (passcode) -----------------------------------------------------
 
 export async function adminCreatePostulante(
-  nombre: string,
-  apellido: string,
-  idioma: Lang = 'es'
+  nombreApellido: string,
+  pais: string,
+  idioma: Lang = 'es',
+  reclutador?: string
 ): Promise<PostulanteSummary> {
   const { data, error } = await supabase.rpc('prosegur_admin_create_postulante', {
     p_passcode: requireOpsPasscode(),
-    p_nombre: nombre,
-    p_apellido: apellido,
+    p_nombre_apellido: nombreApellido,
+    p_pais: pais,
     p_idioma: idioma,
+    p_reclutador: reclutador?.trim() || null,
   });
   if (error) throw error;
   return parsePostulante(data as Record<string, unknown>);
@@ -205,7 +207,7 @@ export async function adminDeletePostulante(responseId: string): Promise<void> {
   if (error) throw error;
 }
 
-/** Quita la marca de proceso finalizado para que el postulante pueda editar de nuevo */
+/** Quita marcas de cierre para que el postulante pueda editar de nuevo */
 export async function adminUnlockSurvey(responseId: string): Promise<SurveyResponse> {
   const { data, error } = await supabase.rpc('prosegur_admin_unlock_survey', {
     p_passcode: requireOpsPasscode(),

@@ -296,6 +296,7 @@ export const parte1: SurveySection = {
       titlePt: 'Módulo de preço 1 — Telefónica',
       description: 'Solo si respondió código 1 o 2 en P7.',
       descriptionPt: 'Apenas se respondeu código 1 ou 2 em P7.',
+      showIf: SI_P7_PRECIO,
       questions: [
         {
           id: 'p9-precio-instalacion',
@@ -656,6 +657,42 @@ export const parte1: SurveySection = {
               labelPt: 'Que garantia oferecem?',
             },
           ],
+        },
+        {
+          id: 'p27-detalle-tipo-solucion',
+          text: 'P27. Detallar respuesta — ¿Qué tipo de solución me recomendaría?',
+          textPt: 'P27. Detalhar resposta — Que tipo de solução me recomendaria?',
+          type: 'longtext',
+        },
+        {
+          id: 'p27-detalle-monitoreo',
+          text: 'P27. Detallar respuesta — ¿Cómo funciona el monitoreo?',
+          textPt: 'P27. Detalhar resposta — Como funciona a monitorização?',
+          type: 'longtext',
+        },
+        {
+          id: 'p27-detalle-alarma',
+          text: 'P27. Detallar respuesta — ¿Qué sucede si se activa la alarma?',
+          textPt: 'P27. Detalhar resposta — O que acontece se o alarme for ativado?',
+          type: 'longtext',
+        },
+        {
+          id: 'p27-detalle-app',
+          text: 'P27. Detallar respuesta — ¿Tienen aplicación móvil?',
+          textPt: 'P27. Detalhar resposta — Têm aplicação móvel?',
+          type: 'longtext',
+        },
+        {
+          id: 'p27-detalle-instalacion',
+          text: 'P27. Detallar respuesta — ¿Qué tiempo toma la instalación?',
+          textPt: 'P27. Detalhar resposta — Quanto tempo demora a instalação?',
+          type: 'longtext',
+        },
+        {
+          id: 'p27-detalle-garantia',
+          text: 'P27. Detallar respuesta — ¿Qué garantía ofrecen?',
+          textPt: 'P27. Detalhar resposta — Que garantia oferecem?',
+          type: 'longtext',
         },
         {
           id: 'p27a-precio-instalacion',

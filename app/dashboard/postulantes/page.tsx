@@ -5,6 +5,7 @@ import {
   adminCreatePostulante,
   adminDeletePostulante,
   adminListPostulantes,
+  adminUnlockSurvey,
 } from '@/lib/data';
 import { PAISES } from '@/lib/survey-config/constants';
 import { getPartProgressLabel, getScreeningSnapshot } from '@/lib/survey-snapshot';
@@ -43,6 +44,7 @@ import {
   Plus,
   Search,
   Trash2,
+  Unlock,
   UserPlus,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -57,11 +59,13 @@ export default function PostulantesPage() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [nombre, setNombre] = useState('');
-  const [apellido, setApellido] = useState('');
+  const [nombreApellido, setNombreApellido] = useState('');
+  const [pais, setPais] = useState('');
   const [idioma, setIdioma] = useState<Lang>('es');
+  const [reclutador, setReclutador] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<PostulanteSummary | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [reopeningId, setReopeningId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterPais, setFilterPais] = useState('all');
 
@@ -96,19 +100,33 @@ export default function PostulantesPage() {
     });
   }, [postulantes, searchTerm, filterPais]);
 
+  const resetCreateForm = () => {
+    setNombreApellido('');
+    setPais('');
+    setIdioma('es');
+    setReclutador('');
+  };
+
   const handleCreate = async () => {
-    if (!nombre.trim() || !apellido.trim()) {
+    if (!nombreApellido.trim()) {
       toast.error('Completá nombre y apellido');
+      return;
+    }
+    if (!pais) {
+      toast.error('Seleccioná un país');
       return;
     }
     setCreating(true);
     try {
-      const created = await adminCreatePostulante(nombre.trim(), apellido.trim(), idioma);
+      const created = await adminCreatePostulante(
+        nombreApellido.trim(),
+        pais,
+        idioma,
+        reclutador.trim() || undefined
+      );
       setPostulantes((prev) => [created, ...prev]);
       setDialogOpen(false);
-      setNombre('');
-      setApellido('');
-      setIdioma('es');
+      resetCreateForm();
       toast.success(`Postulante ${created.code} creado`);
     } catch {
       toast.error('No se pudo crear el postulante');
@@ -136,6 +154,31 @@ export default function PostulantesPage() {
     if (!accessToken) return;
     await navigator.clipboard.writeText(getSurveyUrl(accessToken));
     toast.success('Link copiado al portapapeles');
+  };
+
+  const handleReopenSurvey = async (postulante: PostulanteSummary) => {
+    setReopeningId(postulante.id);
+    try {
+      const updated = await adminUnlockSurvey(postulante.id);
+      setPostulantes((prev) =>
+        prev.map((p) =>
+          p.id === updated.id
+            ? {
+                ...p,
+                answers: updated.answers,
+                stages: updated.stages,
+                status: updated.status,
+                updatedAt: updated.updatedAt,
+              }
+            : p
+        )
+      );
+      toast.success(`Cuestionario de ${postulante.code || postulante.id} reabierto`);
+    } catch {
+      toast.error('No se pudo reabrir el cuestionario');
+    } finally {
+      setReopeningId(null);
+    }
   };
 
   return (
@@ -222,13 +265,24 @@ export default function PostulantesPage() {
                       p.nombreApellido ||
                       [p.nombre, p.apellido].filter(Boolean).join(' ') ||
                       '-';
+                    // El reclutador se guarda en las answers al crear el postulante
+                    const reclutador = (p.answers?.['reclutador'] as string) || '';
 
                     return (
                       <tr key={p.id} className="border-b last:border-0 hover:bg-muted/20">
                         <td className="p-3 pl-6 font-mono font-medium whitespace-nowrap">
                           {p.code}
                         </td>
-                        <td className="p-3 whitespace-nowrap">{displayName}</td>
+                        <td className="p-3 whitespace-nowrap">
+                          <span className="inline-flex flex-col">
+                            <span>{displayName}</span>
+                            {reclutador && (
+                              <span className="text-xs text-muted-foreground">
+                                Reclutador: {reclutador}
+                              </span>
+                            )}
+                          </span>
+                        </td>
                         <td className="p-3">
                           {snapshot.hasScreening ? (
                             <span className="inline-flex flex-col">
@@ -295,6 +349,17 @@ export default function PostulantesPage() {
                                   </DropdownMenuItem>
                                 )}
                                 <DropdownMenuItem
+                                  disabled={reopeningId === p.id}
+                                  onClick={() => handleReopenSurvey(p)}
+                                >
+                                  {reopeningId === p.id ? (
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  ) : (
+                                    <Unlock className="w-4 h-4 mr-2" />
+                                  )}
+                                  Reabrir cuestionario
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
                                   className="text-red-600 focus:text-red-600"
                                   onClick={() => setDeleteTarget(p)}
                                 >
@@ -315,7 +380,13 @@ export default function PostulantesPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) resetCreateForm();
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Nuevo postulante</DialogTitle>
@@ -325,22 +396,31 @@ export default function PostulantesPage() {
           </DialogHeader>
           <div className="grid gap-4 py-2">
             <div className="space-y-2">
-              <Label htmlFor="nombre">Nombre</Label>
+              <Label htmlFor="nombre-apellido">Nombre y apellido</Label>
               <Input
-                id="nombre"
-                value={nombre}
-                onChange={(e) => setNombre(e.target.value)}
-                placeholder="Nombre"
+                id="nombre-apellido"
+                value={nombreApellido}
+                onChange={(e) => setNombreApellido(e.target.value)}
+                placeholder="Ej: Juan Pérez"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="apellido">Apellido</Label>
-              <Input
-                id="apellido"
-                value={apellido}
-                onChange={(e) => setApellido(e.target.value)}
-                placeholder="Apellido"
-              />
+              <Label htmlFor="pais">País</Label>
+              <Select value={pais} onValueChange={setPais}>
+                <SelectTrigger id="pais">
+                  <SelectValue placeholder="Seleccionar país" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAISES.map((p) => (
+                    <SelectItem key={p.value} value={p.value}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                La región (ej. AMBA) aparecerá en la tabla cuando el encuestado la complete en el cuestionario.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="idioma">Idioma del cuestionario</Label>
@@ -353,6 +433,15 @@ export default function PostulantesPage() {
                   <SelectItem value="pt">Português (Portugal)</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="reclutador">Reclutador</Label>
+              <Input
+                id="reclutador"
+                value={reclutador}
+                onChange={(e) => setReclutador(e.target.value)}
+                placeholder="Nombre del reclutador"
+              />
             </div>
           </div>
           <DialogFooter>

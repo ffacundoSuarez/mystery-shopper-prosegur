@@ -117,6 +117,11 @@ export function getMaxApprovedStage(stages: Record<string, { status?: string }>)
   return maxStage;
 }
 
+/** ¿Las 3 partes revisables están aprobadas? */
+export function allStagesApproved(stages: Record<string, { status?: string }> = {}): boolean {
+  return REVIEWABLE_SECTIONS.every((sectionId) => stages[sectionId]?.status === 'aprobada');
+}
+
 /** Índice del siguiente módulo visible dentro de una sección, o -1 si no hay */
 export function getNextVisibleModuleIndex(
   section: SurveySection,
@@ -161,11 +166,15 @@ export function locateQuestion(
   return null;
 }
 
-/** Lista ordenada de IDs de preguntas marcadas a revisar */
+/** Lista ordenada de IDs de preguntas marcadas a revisar (excluye ya corregidas) */
 export function getOrderedReviewQuestionIds(
-  reviewFlags: Record<string, { note: string; sectionId: string }> = {}
+  reviewFlags: Record<string, { note: string; sectionId: string; corrected?: boolean }> = {}
 ): string[] {
-  const flagged = new Set(Object.keys(reviewFlags));
+  const flagged = new Set(
+    Object.entries(reviewFlags)
+      .filter(([, flag]) => flag.corrected !== true)
+      .map(([id]) => id)
+  );
   const ordered: string[] = [];
   for (const section of surveySections) {
     const modules = getAllSectionModules(section);
