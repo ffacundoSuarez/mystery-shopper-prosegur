@@ -26,6 +26,7 @@ import {
   exportResponsesToPdf,
 } from '@/lib/export';
 import { getSectionTitle } from '@/lib/survey-config';
+import { getScreeningSnapshot } from '@/lib/survey-snapshot';
 import { PublicResult, SurveyResponse } from '@/lib/types';
 import {
   Search,
@@ -61,7 +62,7 @@ export default function ResultadosPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterEmpresa, setFilterEmpresa] = useState('all');
-  const [filterCiudad, setFilterCiudad] = useState('all');
+  const [filterPais, setFilterPais] = useState('all');
   const [selected, setSelected] = useState<PublicResult | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [exporting, setExporting] = useState<string | null>(null);
@@ -78,16 +79,28 @@ export default function ResultadosPage() {
     })();
   }, []);
 
+  // Empresa = marca que el encuestado respondió; País = del screening
   const empresas = useMemo(
-    () => [...new Set(results.map((s) => s.empresa).filter(Boolean))] as string[],
+    () =>
+      [
+        ...new Set(
+          results.map((s) => getScreeningSnapshot(s.answers).marca).filter(Boolean)
+        ),
+      ] as string[],
     [results]
   );
-  const ciudades = useMemo(
-    () => [...new Set(results.map((s) => s.ciudad).filter(Boolean))] as string[],
+  const paises = useMemo(
+    () =>
+      [
+        ...new Set(
+          results.map((s) => getScreeningSnapshot(s.answers).pais).filter(Boolean)
+        ),
+      ] as string[],
     [results]
   );
 
   const filtered = results.filter((s) => {
+    const snapshot = getScreeningSnapshot(s.answers);
     const term = searchTerm.toLowerCase();
     const name =
       s.nombreApellido || [s.nombre, s.apellido].filter(Boolean).join(' ') || '';
@@ -96,10 +109,15 @@ export default function ResultadosPage() {
       name.toLowerCase().includes(term) ||
       (s.code || '').toLowerCase().includes(term) ||
       s.id.toLowerCase().includes(term);
-    const matchesEmpresa = filterEmpresa === 'all' || s.empresa === filterEmpresa;
-    const matchesCiudad = filterCiudad === 'all' || s.ciudad === filterCiudad;
-    return matchesSearch && matchesEmpresa && matchesCiudad;
+    const matchesEmpresa =
+      filterEmpresa === 'all' || snapshot.marca === filterEmpresa;
+    const matchesPais = filterPais === 'all' || snapshot.pais === filterPais;
+    return matchesSearch && matchesEmpresa && matchesPais;
   });
+
+  const selectedSnapshot = selected
+    ? getScreeningSnapshot(selected.answers)
+    : null;
 
   const handleExport = async (format: 'csv' | 'excel' | 'pdf') => {
     if (filtered.length === 0) return;
@@ -198,14 +216,14 @@ export default function ResultadosPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={filterCiudad} onValueChange={setFilterCiudad}>
+              <Select value={filterPais} onValueChange={setFilterPais}>
                 <SelectTrigger className="w-full sm:w-44">
                   <MapPin className="w-4 h-4 mr-2" />
-                  <SelectValue placeholder="Ciudad" />
+                  <SelectValue placeholder="País" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todas las ciudades</SelectItem>
-                  {ciudades.map((c) => (
+                  <SelectItem value="all">Todos los países</SelectItem>
+                  {paises.map((c) => (
                     <SelectItem key={c} value={c}>
                       {c}
                     </SelectItem>
@@ -234,13 +252,15 @@ export default function ResultadosPage() {
                       <th className="text-left p-4 font-medium">ID</th>
                       <th className="text-left p-4 font-medium">Nombre</th>
                       <th className="text-left p-4 font-medium">Empresa</th>
-                      <th className="text-left p-4 font-medium">Ciudad</th>
+                      <th className="text-left p-4 font-medium">País</th>
                       <th className="text-left p-4 font-medium">Etapa alcanzada</th>
                       <th className="text-right p-4 font-medium">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map((r) => (
+                    {filtered.map((r) => {
+                      const snapshot = getScreeningSnapshot(r.answers);
+                      return (
                       <tr key={r.id} className="border-b last:border-0 hover:bg-muted/20">
                         <td className="p-4 font-mono">{r.code || r.id}</td>
                         <td className="p-4">
@@ -251,14 +271,25 @@ export default function ResultadosPage() {
                         <td className="p-4">
                           <span className="flex items-center gap-1">
                             <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
-                            {r.empresa || '-'}
+                            {snapshot.marca || '-'}
                           </span>
                         </td>
                         <td className="p-4">
-                          <span className="flex items-center gap-1">
-                            <MapPin className="w-3.5 h-3.5 text-muted-foreground" />
-                            {r.ciudad || '-'}
-                          </span>
+                          {snapshot.pais ? (
+                            <span className="flex items-start gap-1">
+                              <MapPin className="w-3.5 h-3.5 mt-0.5 text-muted-foreground" />
+                              <span className="inline-flex flex-col">
+                                <span>{snapshot.pais}</span>
+                                {snapshot.region && (
+                                  <span className="text-xs text-muted-foreground">
+                                    {snapshot.region}
+                                  </span>
+                                )}
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
                         </td>
                         <td className="p-4">
                           {r.maxApprovedStage
@@ -279,7 +310,8 @@ export default function ResultadosPage() {
                           </Button>
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -294,8 +326,9 @@ export default function ResultadosPage() {
             <DialogTitle className="text-2xl">Detalles del postulante</DialogTitle>
             <DialogDescription className="text-base">
               {selected?.code ? `ID: ${selected.code}` : `ID: ${selected?.id}`}
-              {selected?.empresa ? ` · ${selected.empresa}` : ''}
-              {selected?.ciudad ? ` · ${selected.ciudad}` : ''}
+              {selectedSnapshot?.marca ? ` · ${selectedSnapshot.marca}` : ''}
+              {selectedSnapshot?.pais ? ` · ${selectedSnapshot.pais}` : ''}
+              {selectedSnapshot?.region ? ` (${selectedSnapshot.region})` : ''}
             </DialogDescription>
           </DialogHeader>
           {selected && (
