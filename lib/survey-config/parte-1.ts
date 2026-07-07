@@ -462,8 +462,8 @@ export const parte1: SurveySection = {
         },
         {
           id: 'p18-otras-preguntas',
-          text: 'P18. ¿El comercial realizó alguna pregunta más? Detallar textualmente',
-          textPt: 'P18. O comercial fez mais alguma pergunta? Detalhar textualmente',
+          text: 'P18. ¿El comercial realizó alguna pregunta más? Detallar textual todo lo preguntado por el comercial',
+          textPt: 'P18. O comercial fez mais alguma pergunta? Detalhar textualmente tudo o que foi perguntado pelo comercial',
           type: 'longtext',
         },
         {
@@ -481,8 +481,8 @@ export const parte1: SurveySection = {
         },
         {
           id: 'p20-atencion',
-          text: 'P20. ¿El comercial prestó atención y recordó los datos que usted le fue brindando?',
-          textPt: 'P20. O comercial prestou atenção e recordou os dados que lhe foi fornecendo?',
+          text: 'P20. ¿El comercial prestó atención y recordó los datos que usted le fue brindando durante la conversación?',
+          textPt: 'P20. O comercial prestou atenção e recordou os dados que lhe foi fornecendo durante a conversa?',
           type: 'single',
           options: SI_NO_COD,
         },
@@ -757,25 +757,59 @@ export const parte1: SurveySection = {
           options: [
             {
               value: '1',
-              label: 'Sí, cuotas con y sin interés',
-              labelPt: 'Sim, prestações com e sem juros',
+              label: 'Sí, me ofreció cuotas con y sin interés',
+              labelPt: 'Sim, ofereceu-me prestações com e sem juros',
             },
             {
               value: '2',
-              label: 'Sí, cuotas sin interés',
-              labelPt: 'Sim, prestações sem juros',
+              label: 'Sí, me ofreció cuotas sin interés',
+              labelPt: 'Sim, ofereceu-me prestações sem juros',
             },
             {
               value: '3',
-              label: 'Sí, cuotas con interés',
-              labelPt: 'Sim, prestações com juros',
+              label: 'Sí, me ofreció cuotas CON interés',
+              labelPt: 'Sim, ofereceu-me prestações COM juros',
             },
             {
               value: '4',
-              label: 'No ofreció cuotas',
-              labelPt: 'Não ofereceu prestações',
+              label: 'No, no me ofreció cuotas',
+              labelPt: 'Não, não me ofereceu prestações',
             },
           ],
+        },
+        {
+          id: 'p31b-medios-pago',
+          text: 'P31B. ¿Qué medios de pago aceptan? Seleccionar todos los que corresponda',
+          textPt: 'P31B. Que meios de pagamento aceitam? Selecionar todos os que se aplicarem',
+          type: 'multiple',
+          options: [
+            {
+              value: '1',
+              label: 'Pago en efectivo',
+              labelPt: 'Pagamento em dinheiro',
+            },
+            {
+              value: '2',
+              label: 'Pago por transferencia / CBU',
+              labelPt: 'Pagamento por transferência / IBAN',
+            },
+            {
+              value: '3',
+              label: 'Tarjeta de débito',
+              labelPt: 'Cartão de débito',
+            },
+            {
+              value: '4',
+              label: 'Tarjeta de crédito',
+              labelPt: 'Cartão de crédito',
+            },
+          ],
+        },
+        {
+          id: 'p31c-diferencia-pago',
+          text: 'P31C. ¿Hay alguna diferencia comercial, promocional o en los precios según el tipo de pago? ¿cuál?',
+          textPt: 'P31C. Há alguma diferença comercial, promocional ou nos preços conforme o tipo de pagamento? Qual?',
+          type: 'longtext',
         },
         {
           id: 'p32-tipo-promo',
@@ -880,8 +914,8 @@ export const parte1: SurveySection = {
       questions: [
         {
           id: 'p41-cierre',
-          text: 'P41. ¿El comercial realizó un intento de cierre de venta explícito?',
-          textPt: 'P41. O comercial realizou uma tentativa de encerramento de venda explícita?',
+          text: 'P41. ¿El comercial realizó un intento de cierre de venta explícito durante la interacción?',
+          textPt: 'P41. O comercial realizou uma tentativa de encerramento de venda explícita durante a interação?',
           type: 'single',
           options: SI_NO_COD,
         },
@@ -934,8 +968,8 @@ export const parte1: SurveySection = {
         },
         {
           id: 'p47-cierre-conversacion',
-          text: 'P47. Describa cómo se cerró la conversación con el comercial',
-          textPt: 'P47. Descreva como se encerrou a conversa com o comercial',
+          text: 'P47. Por favor, describa cómo se cerró la conversación con el comercial',
+          textPt: 'P47. Por favor, descreva como se encerrou a conversa com o comercial',
           type: 'longtext',
         },
       ],
