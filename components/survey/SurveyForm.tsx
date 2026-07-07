@@ -12,6 +12,7 @@ import {
   locateQuestion,
   getOrderedReviewQuestionIds,
   getLocalizedSectionTitle,
+  allStagesApproved,
 } from '@/lib/survey-config';
 import {
   getDisqualification,
@@ -212,7 +213,8 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
             setCurrentSection(getResumeSectionIndex(existing.stages || {}));
           }
 
-          if (ans['encuesta-cerrada'] === 'si') {
+          // Cerrada manualmente o con las tres partes aprobadas => cartel de gracias
+          if (ans['encuesta-cerrada'] === 'si' || allStagesApproved(existing.stages || {})) {
             setSurveyThankYou(true);
           }
         }

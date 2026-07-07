@@ -31,8 +31,10 @@ import {
   adminUpdateAnswers,
 } from '@/lib/data';
 import { getSectionTitle, REVIEWABLE_SECTIONS } from '@/lib/survey-config';
+import { PAISES } from '@/lib/survey-config/constants';
+import { getScreeningSnapshot } from '@/lib/survey-snapshot';
 import { AnswerValue, StageStatus, SurveyResponse } from '@/lib/types';
-import { Eye, Building2, MapPin, Clock, Loader2 } from 'lucide-react';
+import { Eye, Building2, MapPin, Clock, Loader2, Filter } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -69,6 +71,7 @@ export default function RevisionPage() {
   const [filterId, setFilterId] = useState('');
   const [filterEtapa, setFilterEtapa] = useState('all');
   const [filterEstado, setFilterEstado] = useState('all');
+  const [filterPais, setFilterPais] = useState('all');
 
   const load = async () => {
     try {
@@ -91,6 +94,7 @@ export default function RevisionPage() {
     const id = filterId.trim().toLowerCase();
 
     return responses.filter((r) => {
+      const snapshot = getScreeningSnapshot(r.answers);
       const name = displayName(r).toLowerCase();
       const codeOrId = (r.code || r.id).toLowerCase();
       const stageEntries = REVIEWABLE_SECTIONS.map((sectionId) => ({
@@ -99,7 +103,8 @@ export default function RevisionPage() {
       })).filter((e) => e.status);
 
       const matchesNombre = !nombre || name.includes(nombre);
-      const matchesEmpresa = !empresa || (r.empresa || '').toLowerCase().includes(empresa);
+      const matchesEmpresa =
+        !empresa || (snapshot.marca || '').toLowerCase().includes(empresa);
       const matchesId =
         !id || codeOrId.includes(id) || r.id.toLowerCase().includes(id);
       const matchesEtapa =
@@ -108,10 +113,19 @@ export default function RevisionPage() {
       const matchesEstado =
         filterEstado === 'all' ||
         stageEntries.some((e) => e.status === filterEstado);
+      const matchesPais =
+        filterPais === 'all' || snapshot.paisCode === filterPais;
 
-      return matchesNombre && matchesEmpresa && matchesId && matchesEtapa && matchesEstado;
+      return (
+        matchesNombre &&
+        matchesEmpresa &&
+        matchesId &&
+        matchesEtapa &&
+        matchesEstado &&
+        matchesPais
+      );
     });
-  }, [responses, filterNombre, filterEmpresa, filterId, filterEtapa, filterEstado]);
+  }, [responses, filterNombre, filterEmpresa, filterId, filterEtapa, filterEstado, filterPais]);
 
   const filteredPendingStages = useMemo(
     () => filteredResponses.reduce((sum, r) => sum + pendingStageIds(r).length, 0),
@@ -246,6 +260,20 @@ export default function RevisionPage() {
               <SelectItem value="pendiente">Pendiente</SelectItem>
             </SelectContent>
           </Select>
+          <Select value={filterPais} onValueChange={setFilterPais}>
+            <SelectTrigger className="h-9 w-full sm:w-44">
+              <Filter className="w-4 h-4 mr-2 shrink-0" />
+              <SelectValue placeholder="País" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los países</SelectItem>
+              {PAISES.map((p) => (
+                <SelectItem key={p.value} value={p.value}>
+                  {p.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -273,6 +301,7 @@ export default function RevisionPage() {
       ) : (
         <div className="grid gap-3">
           {filteredResponses.map((response) => {
+            const snapshot = getScreeningSnapshot(response.answers);
             const stageBadges = REVIEWABLE_SECTIONS.map((sectionId) => {
               const status = response.stages?.[sectionId]?.status as StageStatus | undefined;
               if (!status) return null;
@@ -315,11 +344,22 @@ export default function RevisionPage() {
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1.5">
                           <Building2 className="w-3.5 h-3.5 shrink-0" />
-                          {response.empresa || '-'}
+                          {snapshot.marca || '-'}
                         </span>
                         <span className="flex items-center gap-1.5">
                           <MapPin className="w-3.5 h-3.5 shrink-0" />
-                          {response.ciudad || '-'}
+                          {snapshot.pais ? (
+                            <span className="inline-flex flex-col">
+                              <span>{snapshot.pais}</span>
+                              {snapshot.region && (
+                                <span className="text-[10px] text-muted-foreground/80">
+                                  {snapshot.region}
+                                </span>
+                              )}
+                            </span>
+                          ) : (
+                            '-'
+                          )}
                         </span>
                         <span className="flex items-center gap-1.5">
                           <Clock className="w-3.5 h-3.5 shrink-0" />
@@ -358,8 +398,18 @@ export default function RevisionPage() {
             </DialogTitle>
             <DialogDescription className="text-base">
               {selected?.code ? `ID: ${selected.code}` : selected ? `ID: ${selected.id}` : ''}
-              {selected?.empresa ? ` · ${selected.empresa}` : ''}
-              {selected?.ciudad ? ` · ${selected.ciudad}` : ''}
+              {selected &&
+                (() => {
+                  const snapshot = getScreeningSnapshot(selected.answers);
+                  return (
+                    <>
+                      {snapshot.marca ? ` · ${snapshot.marca}` : ''}
+                      {snapshot.pais
+                        ? ` · ${snapshot.pais}${snapshot.region ? `, ${snapshot.region}` : ''}`
+                        : ''}
+                    </>
+                  );
+                })()}
             </DialogDescription>
           </DialogHeader>
 

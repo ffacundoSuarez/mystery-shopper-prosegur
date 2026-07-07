@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -167,6 +167,12 @@ function getAnswersDiff(
   return diff;
 }
 
+/** Abre la menor parte pendiente de revisión, o la primera disponible */
+function getDefaultSectionId(stages: StagesMap, sectionIds: string[]): string {
+  const pendingReview = sectionIds.find((id) => stages[id]?.status === 'en_revision');
+  return pendingReview ?? sectionIds[0] ?? 'parte-1';
+}
+
 export function ResponseDetails({
   response,
   mode = 'revision',
@@ -185,6 +191,8 @@ export function ResponseDetails({
   const [editingIds, setEditingIds] = useState<Set<string>>(new Set());
   const [uploading, setUploading] = useState<Record<string, boolean>>({});
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
+  const [currentSectionId, setCurrentSectionId] = useState<string>('parte-1');
+  const prevResponseIdRef = useRef(response.id);
 
   const stages: StagesMap = response.stages || {};
   const lang: Lang = response.idioma || 'es';
@@ -194,6 +202,14 @@ export function ResponseDetails({
   const fechaFin =
     (response.answers['fecha-fin'] as string) || response.fechaFin || '';
 
+  const reviewableSectionIds =
+    mode === 'results'
+      ? REVIEWABLE_SECTIONS.filter((id) => {
+          const st = stages[id]?.status;
+          return st === 'aprobada' || st === 'rechazada';
+        })
+      : REVIEWABLE_SECTIONS;
+
   useEffect(() => {
     const flags = response.reviewFlags || {};
     const active: ReviewFlagsMap = {};
@@ -202,13 +218,26 @@ export function ResponseDetails({
         active[qId] = flag;
       }
     }
-    setDraftFlags(active);
+
+    // Al cambiar de encuesta, resetear; si solo cambian respuestas, preservar borradores locales
+    if (prevResponseIdRef.current !== response.id) {
+      prevResponseIdRef.current = response.id;
+      setDraftFlags(active);
+    } else {
+      setDraftFlags((prev) => ({ ...active, ...prev }));
+    }
   }, [response.id, response.reviewFlags]);
 
   useEffect(() => {
     setEditedAnswers(response.answers || {});
     setEditingIds(new Set());
   }, [response.id, response.answers]);
+
+  useEffect(() => {
+    setCurrentSectionId(getDefaultSectionId(stages, reviewableSectionIds));
+    // Solo al abrir otra encuesta; no resetear al guardar respuestas
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [response.id]);
 
   const answersDiff = useMemo(
     () => getAnswersDiff(response.answers || {}, editedAnswers),
@@ -278,14 +307,6 @@ export function ResponseDetails({
     await onSaveAnswers(answersDiff);
     setEditingIds(new Set());
   };
-
-  const reviewableSectionIds =
-    mode === 'results'
-      ? REVIEWABLE_SECTIONS.filter((id) => {
-          const st = stages[id]?.status;
-          return st === 'aprobada' || st === 'rechazada';
-        })
-      : REVIEWABLE_SECTIONS;
 
   const toggleQuestionFlag = (questionId: string, sectionId: string, checked: boolean) => {
     setDraftFlags((prev) => {
@@ -696,7 +717,45 @@ export function ResponseDetails({
         </div>
       )}
 
-      {reviewableSectionIds.map((sectionId) => renderSectionBlock(sectionId))}
+      {reviewableSectionIds.length > 1 && (
+        <div className="flex justify-center gap-3 flex-wrap py-1">
+          {reviewableSectionIds.map((sectionId) => {
+            const status = stages[sectionId]?.status;
+            const isActive = currentSectionId === sectionId;
+            // Número real de la parte (1, 2, 3), no el índice de la lista filtrada
+            const partNumber = REVIEWABLE_SECTIONS.indexOf(sectionId) + 1;
+            return (
+              <button
+                key={sectionId}
+                type="button"
+                onClick={() => setCurrentSectionId(sectionId)}
+                className={cn(
+                  'w-9 h-9 rounded-full text-sm font-semibold transition-all flex items-center justify-center border-2',
+                  isActive
+                    ? 'bg-primary text-primary-foreground border-primary scale-110 shadow-sm'
+                    : status === 'aprobada'
+                    ? 'bg-green-500 text-white border-green-500'
+                    : status === 'en_revision'
+                    ? 'bg-amber-400 text-amber-950 border-amber-400'
+                    : status === 'rechazada'
+                    ? 'bg-red-400 text-white border-red-400'
+                    : 'bg-muted text-muted-foreground border-muted-foreground/30'
+                )}
+                title={getSectionTitle(sectionId)}
+              >
+                {partNumber}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {reviewableSectionIds.length > 0 &&
+        renderSectionBlock(
+          reviewableSectionIds.includes(currentSectionId)
+            ? currentSectionId
+            : reviewableSectionIds[0]
+        )}
 
       {mode === 'results' && reviewableSectionIds.length === 0 && (
         <p className="text-sm text-muted-foreground text-center py-8">
