@@ -4,12 +4,12 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   adminCreatePostulante,
   adminDeletePostulante,
-  adminListPostulantes,
+  adminListResponsesSummary,
   adminUnlockSurvey,
 } from '@/lib/data';
 import { PAISES } from '@/lib/survey-config/constants';
 import { getPartProgressLabel, getScreeningSnapshot } from '@/lib/survey-snapshot';
-import { Lang, PostulanteSummary } from '@/lib/types';
+import { Lang, SurveyResponse } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -55,7 +55,7 @@ function getSurveyUrl(accessToken: string) {
 }
 
 export default function PostulantesPage() {
-  const [postulantes, setPostulantes] = useState<PostulanteSummary[]>([]);
+  const [postulantes, setPostulantes] = useState<SurveyResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -63,7 +63,7 @@ export default function PostulantesPage() {
   const [pais, setPais] = useState('');
   const [idioma, setIdioma] = useState<Lang>('es');
   const [reclutador, setReclutador] = useState('');
-  const [deleteTarget, setDeleteTarget] = useState<PostulanteSummary | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<SurveyResponse | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [reopeningId, setReopeningId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -71,7 +71,7 @@ export default function PostulantesPage() {
 
   const load = async () => {
     try {
-      setPostulantes(await adminListPostulantes());
+      setPostulantes(await adminListResponsesSummary());
     } catch {
       toast.error('Error al cargar postulantes');
     } finally {
@@ -124,7 +124,26 @@ export default function PostulantesPage() {
         idioma,
         reclutador.trim() || undefined
       );
-      setPostulantes((prev) => [created, ...prev]);
+      setPostulantes((prev) => [
+        {
+          id: created.id,
+          code: created.code,
+          accessToken: created.accessToken,
+          idioma: created.idioma || 'es',
+          nombre: created.nombre,
+          apellido: created.apellido,
+          nombreApellido: created.nombreApellido,
+          empresa: created.empresa,
+          ciudad: created.ciudad,
+          status: created.status || 'borrador',
+          stages: created.stages || {},
+          reviewFlags: created.reviewFlags || {},
+          answers: created.answers || {},
+          createdAt: created.createdAt,
+          updatedAt: created.updatedAt || created.createdAt,
+        },
+        ...prev,
+      ]);
       setDialogOpen(false);
       resetCreateForm();
       toast.success(`Postulante ${created.code} creado`);
@@ -156,7 +175,7 @@ export default function PostulantesPage() {
     toast.success('Link copiado al portapapeles');
   };
 
-  const handleReopenSurvey = async (postulante: PostulanteSummary) => {
+  const handleReopenSurvey = async (postulante: SurveyResponse) => {
     setReopeningId(postulante.id);
     try {
       const updated = await adminUnlockSurvey(postulante.id);
@@ -391,7 +410,7 @@ export default function PostulantesPage() {
           <DialogHeader>
             <DialogTitle>Nuevo postulante</DialogTitle>
             <DialogDescription>
-              Se generará un ID (PS-xxx) y un link único de encuesta.
+              Se generará un ID (ej. 01ARG) y un link único de encuesta.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { getResponses } from '@/lib/data';
+import { adminListResponsesSummary } from '@/lib/data';
 import { getSectionTitle } from '@/lib/survey-config';
 import { SurveyResponse } from '@/lib/types';
 import {
@@ -41,7 +41,7 @@ export default function EstadisticasPage() {
   useEffect(() => {
     (async () => {
       try {
-        setResponses(await getResponses());
+        setResponses(await adminListResponsesSummary());
       } finally {
         setLoading(false);
       }
