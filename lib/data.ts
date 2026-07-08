@@ -170,6 +170,15 @@ export async function adminGetResponses(): Promise<SurveyResponse[]> {
   return ((data as Record<string, unknown>[]) || []).map(parseResponse);
 }
 
+/** Listado liviano para el panel: stages + screening en answers (sin evidencias ni matrices). */
+export async function adminListResponsesSummary(): Promise<SurveyResponse[]> {
+  const { data, error } = await supabase.rpc('prosegur_admin_list_responses_summary', {
+    p_passcode: requireOpsPasscode(),
+  });
+  if (error) throw error;
+  return ((data as Record<string, unknown>[]) || []).map(parseResponse);
+}
+
 export async function adminGetPendingReviews(): Promise<PendingReviewItem[]> {
   const { data, error } = await supabase.rpc('prosegur_admin_get_pending_reviews', {
     p_passcode: requireOpsPasscode(),

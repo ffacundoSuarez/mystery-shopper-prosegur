@@ -2,25 +2,19 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { adminGetPendingReviews, adminGetResponses } from '@/lib/data';
-import { getSectionTitle } from '@/lib/survey-config';
+import { adminListResponsesSummary } from '@/lib/data';
+import { getSectionTitle, REVIEWABLE_SECTIONS } from '@/lib/survey-config';
 import { SurveyResponse } from '@/lib/types';
 import { ClipboardCheck, FileCheck2, Clock, UserPlus, Loader2 } from 'lucide-react';
 
 export default function DashboardPage() {
   const [responses, setResponses] = useState<SurveyResponse[]>([]);
-  const [pendingCount, setPendingCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       try {
-        const [all, pending] = await Promise.all([
-          adminGetResponses(),
-          adminGetPendingReviews(),
-        ]);
-        setResponses(all);
-        setPendingCount(pending.length);
+        setResponses(await adminListResponsesSummary());
       } finally {
         setLoading(false);
       }
@@ -29,17 +23,20 @@ export default function DashboardPage() {
 
   const counts = useMemo(() => {
     let approvedStages = 0;
+    let pendingReviews = 0;
     for (const r of responses) {
-      for (const st of Object.values(r.stages || {})) {
-        if (st.status === 'aprobada') approvedStages++;
+      for (const sectionId of REVIEWABLE_SECTIONS) {
+        const status = r.stages?.[sectionId]?.status;
+        if (status === 'en_revision') pendingReviews++;
+        else if (status === 'aprobada') approvedStages++;
       }
     }
     return {
       postulantes: responses.length,
-      pendingReviews: pendingCount,
+      pendingReviews,
       approvedStages,
     };
-  }, [responses, pendingCount]);
+  }, [responses]);
 
   const stats = [
     {

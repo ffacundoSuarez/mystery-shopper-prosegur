@@ -25,10 +25,11 @@ import {
   STAGE_STATUS_COLORS,
 } from '@/components/dashboard/ResponseDetails';
 import {
-  adminGetResponses,
+  adminListResponsesSummary,
   adminReviewStage,
   adminUnlockSurvey,
   adminUpdateAnswers,
+  getResponseByToken,
 } from '@/lib/data';
 import { getSectionTitle, REVIEWABLE_SECTIONS } from '@/lib/survey-config';
 import { PAISES } from '@/lib/survey-config/constants';
@@ -64,6 +65,7 @@ export default function RevisionPage() {
   const [selected, setSelected] = useState<SurveyResponse | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
   const [unlockLoading, setUnlockLoading] = useState(false);
   const [filterNombre, setFilterNombre] = useState('');
@@ -75,7 +77,7 @@ export default function RevisionPage() {
 
   const load = async () => {
     try {
-      const all = await adminGetResponses();
+      const all = await adminListResponsesSummary();
       setResponses(all);
     } catch {
       toast.error('Error al cargar postulantes');
@@ -182,9 +184,26 @@ export default function RevisionPage() {
     }
   };
 
-  const openDetails = (response: SurveyResponse) => {
-    setSelected(response);
-    setDetailsOpen(true);
+  const openDetails = async (response: SurveyResponse) => {
+    if (!response.accessToken) {
+      toast.error('No se encontró el token de acceso');
+      return;
+    }
+
+    setDetailsLoading(true);
+    try {
+      const full = await getResponseByToken(response.accessToken);
+      if (!full) {
+        toast.error('No se encontró la encuesta');
+        return;
+      }
+      setSelected(full);
+      setDetailsOpen(true);
+    } catch {
+      toast.error('Error al cargar los detalles');
+    } finally {
+      setDetailsLoading(false);
+    }
   };
 
   const handleUnlockSurvey = async () => {
@@ -378,8 +397,13 @@ export default function RevisionPage() {
                       size="sm"
                       className="shrink-0"
                       onClick={() => openDetails(response)}
+                      disabled={detailsLoading}
                     >
-                      <Eye className="w-4 h-4 mr-2" />
+                      {detailsLoading ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Eye className="w-4 h-4 mr-2" />
+                      )}
                       Ver Detalles
                     </Button>
                   </div>
