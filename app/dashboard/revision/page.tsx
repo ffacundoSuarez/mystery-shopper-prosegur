@@ -65,7 +65,7 @@ export default function RevisionPage() {
   const [selected, setSelected] = useState<SurveyResponse | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsLoadingId, setDetailsLoadingId] = useState<string | null>(null);
   const [saveLoading, setSaveLoading] = useState(false);
   const [unlockLoading, setUnlockLoading] = useState(false);
   const [filterNombre, setFilterNombre] = useState('');
@@ -190,7 +190,7 @@ export default function RevisionPage() {
       return;
     }
 
-    setDetailsLoading(true);
+    setDetailsLoadingId(response.id);
     try {
       const full = await getResponseByToken(response.accessToken);
       if (!full) {
@@ -202,7 +202,7 @@ export default function RevisionPage() {
     } catch {
       toast.error('Error al cargar los detalles');
     } finally {
-      setDetailsLoading(false);
+      setDetailsLoadingId(null);
     }
   };
 
@@ -397,9 +397,9 @@ export default function RevisionPage() {
                       size="sm"
                       className="shrink-0"
                       onClick={() => openDetails(response)}
-                      disabled={detailsLoading}
+                      disabled={detailsLoadingId === response.id}
                     >
-                      {detailsLoading ? (
+                      {detailsLoadingId === response.id ? (
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                       ) : (
                         <Eye className="w-4 h-4 mr-2" />
