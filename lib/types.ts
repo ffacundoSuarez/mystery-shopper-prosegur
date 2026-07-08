@@ -140,6 +140,7 @@ export interface SurveyResponse {
   code?: string;
   accessToken?: string;
   idioma?: Lang;
+  isPrueba?: boolean;
   nombre?: string;
   apellido?: string;
   nombreApellido?: string;
@@ -163,6 +164,7 @@ export interface PendingReviewItem {
   code?: string;
   accessToken?: string;
   idioma?: Lang;
+  isPrueba?: boolean;
   nombre?: string;
   apellido?: string;
   nombreApellido?: string;
@@ -194,6 +196,7 @@ export interface PostulanteSummary {
   code?: string;
   accessToken?: string;
   idioma?: Lang;
+  isPrueba?: boolean;
   nombre?: string;
   apellido?: string;
   nombreApellido?: string;

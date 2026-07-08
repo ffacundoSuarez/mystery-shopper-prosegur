@@ -81,6 +81,7 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
   const [stages, setStages] = useState<StagesMap>({});
   const [code, setCode] = useState('');
+  const [responseId, setResponseId] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showStageGate, setShowStageGate] = useState(false);
@@ -194,6 +195,7 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
           setAnswers(ans);
           setStages(existing.stages || {});
           setReviewFlags(flags);
+          setResponseId(existing.id);
           setCode(existing.code || '');
           setLang(existing.idioma || 'es');
 
@@ -257,12 +259,16 @@ export function SurveyForm({ accessToken }: { accessToken: string }) {
   const handleEvidenceUpload = async (questionId: string, files: FileList | null) => {
     if (isFinalized || surveyThankYou) return;
     if (!files || files.length === 0) return;
+    if (!responseId) {
+      toast.error(t('loadError', lang));
+      return;
+    }
     setUploading((p) => ({ ...p, [questionId]: true }));
     try {
       const uploaded: EvidenceFile[] = [];
       for (const file of Array.from(files)) {
         uploaded.push(
-          await uploadEvidence(accessToken, questionId, file, (pct) =>
+          await uploadEvidence(responseId, questionId, file, (pct) =>
             setUploadProgress((p) => ({ ...p, [questionId]: pct }))
           )
         );

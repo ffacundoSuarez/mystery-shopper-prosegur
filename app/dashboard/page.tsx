@@ -22,9 +22,10 @@ export default function DashboardPage() {
   }, []);
 
   const counts = useMemo(() => {
+    const realResponses = responses.filter((r) => !r.isPrueba);
     let approvedStages = 0;
     let pendingReviews = 0;
-    for (const r of responses) {
+    for (const r of realResponses) {
       for (const sectionId of REVIEWABLE_SECTIONS) {
         const status = r.stages?.[sectionId]?.status;
         if (status === 'en_revision') pendingReviews++;
@@ -32,7 +33,7 @@ export default function DashboardPage() {
       }
     }
     return {
-      postulantes: responses.length,
+      postulantes: realResponses.length,
       pendingReviews,
       approvedStages,
     };
@@ -119,7 +120,7 @@ export default function DashboardPage() {
             <p className="text-sm text-muted-foreground">Sin datos todavía.</p>
           ) : (
             <div className="space-y-4">
-              {responses.slice(0, 8).map((r) => {
+              {responses.filter((r) => !r.isPrueba).slice(0, 8).map((r) => {
                 const pendingStages = Object.entries(r.stages || {}).filter(
                   ([, st]) => st.status === 'en_revision'
                 );
