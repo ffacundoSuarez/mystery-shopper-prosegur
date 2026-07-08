@@ -48,40 +48,45 @@ export default function EstadisticasPage() {
     })();
   }, []);
 
+  const realResponses = useMemo(
+    () => responses.filter((r) => !r.isPrueba),
+    [responses]
+  );
+
   const byEmpresa = useMemo(() => {
     const map = new Map<string, number>();
-    for (const r of responses) {
+    for (const r of realResponses) {
       const k = r.empresa || 'Sin empresa';
       map.set(k, (map.get(k) || 0) + 1);
     }
     return [...map.entries()].map(([name, value]) => ({ name, value }));
-  }, [responses]);
+  }, [realResponses]);
 
   const byStatus = useMemo(() => {
     const map = new Map<string, number>();
-    for (const r of responses) {
+    for (const r of realResponses) {
       const k = STATUS_LABELS[r.status] || r.status;
       map.set(k, (map.get(k) || 0) + 1);
     }
     return [...map.entries()].map(([name, value]) => ({ name, value }));
-  }, [responses]);
+  }, [realResponses]);
 
   const byEtapa = useMemo(() => {
     const map = new Map<string, number>();
-    for (const r of responses) {
+    for (const r of realResponses) {
       const raw = r.ultimaEtapa || r.answers['ultima-etapa'] as string | undefined;
       const k = raw ? getSectionTitle(raw) : 'Sin etapa';
       map.set(k, (map.get(k) || 0) + 1);
     }
     return [...map.entries()].map(([name, value]) => ({ name, value }));
-  }, [responses]);
+  }, [realResponses]);
 
   const stageStats = useMemo(() => {
     let pending = 0;
     let inReview = 0;
     let approved = 0;
     let rejected = 0;
-    for (const r of responses) {
+    for (const r of realResponses) {
       for (const st of Object.values(r.stages || {})) {
         if (st.status === 'pendiente') pending++;
         else if (st.status === 'en_revision') inReview++;
@@ -90,7 +95,7 @@ export default function EstadisticasPage() {
       }
     }
     return { pending, inReview, approved, rejected };
-  }, [responses]);
+  }, [realResponses]);
 
   if (loading) {
     return (
@@ -100,7 +105,7 @@ export default function EstadisticasPage() {
     );
   }
 
-  if (responses.length === 0) {
+  if (realResponses.length === 0) {
     return (
       <div className="space-y-6">
         <div>
@@ -125,7 +130,7 @@ export default function EstadisticasPage() {
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {[
-          { label: 'Total encuestas', value: responses.length },
+          { label: 'Total encuestas', value: realResponses.length },
           { label: 'Etapas en revisión', value: stageStats.inReview },
           { label: 'Etapas aprobadas', value: stageStats.approved },
           { label: 'Etapas rechazadas', value: stageStats.rejected },

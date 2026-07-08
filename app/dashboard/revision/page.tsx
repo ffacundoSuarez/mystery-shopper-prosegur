@@ -74,6 +74,7 @@ export default function RevisionPage() {
   const [filterEtapa, setFilterEtapa] = useState('all');
   const [filterEstado, setFilterEstado] = useState('all');
   const [filterPais, setFilterPais] = useState('all');
+  const [filterTipo, setFilterTipo] = useState<'all' | 'real' | 'prueba'>('all');
 
   const load = async () => {
     try {
@@ -117,6 +118,9 @@ export default function RevisionPage() {
         stageEntries.some((e) => e.status === filterEstado);
       const matchesPais =
         filterPais === 'all' || snapshot.paisCode === filterPais;
+      const matchesTipo =
+        filterTipo === 'all' ||
+        (filterTipo === 'prueba' ? Boolean(r.isPrueba) : !r.isPrueba);
 
       return (
         matchesNombre &&
@@ -124,10 +128,11 @@ export default function RevisionPage() {
         matchesId &&
         matchesEtapa &&
         matchesEstado &&
-        matchesPais
+        matchesPais &&
+        matchesTipo
       );
     });
-  }, [responses, filterNombre, filterEmpresa, filterId, filterEtapa, filterEstado, filterPais]);
+  }, [responses, filterNombre, filterEmpresa, filterId, filterEtapa, filterEstado, filterPais, filterTipo]);
 
   const filteredPendingStages = useMemo(
     () => filteredResponses.reduce((sum, r) => sum + pendingStageIds(r).length, 0),
@@ -293,6 +298,19 @@ export default function RevisionPage() {
               ))}
             </SelectContent>
           </Select>
+          <Select
+            value={filterTipo}
+            onValueChange={(v) => setFilterTipo(v as 'all' | 'real' | 'prueba')}
+          >
+            <SelectTrigger className="h-9 w-full sm:w-36">
+              <SelectValue placeholder="Tipo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="real">Reales</SelectItem>
+              <SelectItem value="prueba">Pruebas</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -337,6 +355,11 @@ export default function RevisionPage() {
                         <p className="text-xs text-muted-foreground">
                           {response.code ? `ID: ${response.code}` : `ID: ${response.id}`}
                         </p>
+                        {response.isPrueba && (
+                          <Badge variant="outline" className="text-[10px] py-0">
+                            Prueba
+                          </Badge>
+                        )}
                       </div>
 
                       <div className="flex flex-wrap gap-1.5">

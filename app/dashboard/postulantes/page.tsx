@@ -11,7 +11,9 @@ import { PAISES } from '@/lib/survey-config/constants';
 import { getPartProgressLabel, getScreeningSnapshot } from '@/lib/survey-snapshot';
 import { Lang, SurveyResponse } from '@/lib/types';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -63,11 +65,13 @@ export default function PostulantesPage() {
   const [pais, setPais] = useState('');
   const [idioma, setIdioma] = useState<Lang>('es');
   const [reclutador, setReclutador] = useState('');
+  const [isPrueba, setIsPrueba] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<SurveyResponse | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [reopeningId, setReopeningId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterPais, setFilterPais] = useState('all');
+  const [filterTipo, setFilterTipo] = useState<'all' | 'real' | 'prueba'>('all');
 
   const load = async () => {
     try {
@@ -96,15 +100,19 @@ export default function PostulantesPage() {
         (snapshot.pais || '').toLowerCase().includes(term);
       const matchesPais =
         filterPais === 'all' || snapshot.paisCode === filterPais;
-      return matchesSearch && matchesPais;
+      const matchesTipo =
+        filterTipo === 'all' ||
+        (filterTipo === 'prueba' ? Boolean(p.isPrueba) : !p.isPrueba);
+      return matchesSearch && matchesPais && matchesTipo;
     });
-  }, [postulantes, searchTerm, filterPais]);
+  }, [postulantes, searchTerm, filterPais, filterTipo]);
 
   const resetCreateForm = () => {
     setNombreApellido('');
     setPais('');
     setIdioma('es');
     setReclutador('');
+    setIsPrueba(false);
   };
 
   const handleCreate = async () => {
@@ -122,7 +130,8 @@ export default function PostulantesPage() {
         nombreApellido.trim(),
         pais,
         idioma,
-        reclutador.trim() || undefined
+        reclutador.trim() || undefined,
+        isPrueba
       );
       setPostulantes((prev) => [
         {
@@ -130,6 +139,7 @@ export default function PostulantesPage() {
           code: created.code,
           accessToken: created.accessToken,
           idioma: created.idioma || 'es',
+          isPrueba: created.isPrueba,
           nombre: created.nombre,
           apellido: created.apellido,
           nombreApellido: created.nombreApellido,
@@ -146,7 +156,9 @@ export default function PostulantesPage() {
       ]);
       setDialogOpen(false);
       resetCreateForm();
-      toast.success(`Postulante ${created.code} creado`);
+      toast.success(
+        `Postulante ${created.code} creado${created.isPrueba ? ' (prueba)' : ''}`
+      );
     } catch {
       toast.error('No se pudo crear el postulante');
     } finally {
@@ -249,6 +261,19 @@ export default function PostulantesPage() {
                 ))}
               </SelectContent>
             </Select>
+            <Select
+              value={filterTipo}
+              onValueChange={(v) => setFilterTipo(v as 'all' | 'real' | 'prueba')}
+            >
+              <SelectTrigger className="w-full sm:w-40">
+                <SelectValue placeholder="Tipo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="real">Reales</SelectItem>
+                <SelectItem value="prueba">Pruebas</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {loading ? (
@@ -290,7 +315,14 @@ export default function PostulantesPage() {
                     return (
                       <tr key={p.id} className="border-b last:border-0 hover:bg-muted/20">
                         <td className="p-3 pl-6 font-mono font-medium whitespace-nowrap">
-                          {p.code}
+                          <span className="inline-flex items-center gap-2">
+                            {p.code}
+                            {p.isPrueba && (
+                              <Badge variant="outline" className="text-[10px] py-0">
+                                Prueba
+                              </Badge>
+                            )}
+                          </span>
                         </td>
                         <td className="p-3 whitespace-nowrap">
                           <span className="inline-flex flex-col">
@@ -410,7 +442,7 @@ export default function PostulantesPage() {
           <DialogHeader>
             <DialogTitle>Nuevo postulante</DialogTitle>
             <DialogDescription>
-              Se generará un ID (ej. 01ARG) y un link único de encuesta.
+              Se generará un ID (ej. 01ARG o T01ARG si es prueba) y un link único de encuesta.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
@@ -461,6 +493,22 @@ export default function PostulantesPage() {
                 onChange={(e) => setReclutador(e.target.value)}
                 placeholder="Nombre del reclutador"
               />
+            </div>
+            <div className="flex items-start gap-3 rounded-lg border p-3">
+              <Checkbox
+                id="is-prueba"
+                checked={isPrueba}
+                onCheckedChange={(checked) => setIsPrueba(checked === true)}
+              />
+              <div className="space-y-1">
+                <Label htmlFor="is-prueba" className="cursor-pointer">
+                  Encuesta de prueba
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Genera un ID con prefijo T (ej. T01ARG) para que empresas prueben el
+                  cuestionario sin usar los links reales.
+                </p>
+              </div>
             </div>
           </div>
           <DialogFooter>

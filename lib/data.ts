@@ -36,6 +36,7 @@ function parseResponse(raw: Record<string, unknown>): SurveyResponse {
     answers: (raw.answers as Record<string, AnswerValue>) || {},
     reviewedAt: raw.reviewedAt as string | undefined,
     reviewedBy: raw.reviewedBy as string | undefined,
+    isPrueba: Boolean(raw.isPrueba),
     createdAt: String(raw.createdAt),
     updatedAt: String(raw.updatedAt),
   };
@@ -91,6 +92,7 @@ function parsePostulante(raw: Record<string, unknown>): PostulanteSummary {
     reviewFlags: (raw.reviewFlags as ReviewFlagsMap) || undefined,
     answers: (raw.answers as Record<string, AnswerValue>) || undefined,
     status: raw.status as ResponseStatus | undefined,
+    isPrueba: Boolean(raw.isPrueba),
     createdAt: String(raw.createdAt),
     updatedAt: raw.updatedAt as string | undefined,
   };
@@ -141,7 +143,8 @@ export async function adminCreatePostulante(
   nombreApellido: string,
   pais: string,
   idioma: Lang = 'es',
-  reclutador?: string
+  reclutador?: string,
+  isPrueba = false
 ): Promise<PostulanteSummary> {
   const { data, error } = await supabase.rpc('prosegur_admin_create_postulante', {
     p_passcode: requireOpsPasscode(),
@@ -149,6 +152,7 @@ export async function adminCreatePostulante(
     p_pais: pais,
     p_idioma: idioma,
     p_reclutador: reclutador?.trim() || null,
+    p_is_prueba: isPrueba,
   });
   if (error) throw error;
   return parsePostulante(data as Record<string, unknown>);
