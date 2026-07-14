@@ -52,9 +52,15 @@ import {
   Loader2,
   Pencil,
   Save,
+  Download,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import {
+  downloadAllZip,
+  downloadPartZip,
+  hasAnyEvidences,
+} from '@/lib/evidence-zip';
 
 export type ResponseDetailsMode = 'revision' | 'results';
 
@@ -110,10 +116,10 @@ function renderAnswerCell(
             href={file.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 text-primary hover:underline"
+            className="flex items-center gap-2 text-foreground hover:underline"
           >
             <FileText className="w-4 h-4 shrink-0" />
-            <span className="truncate">{file.name}</span>
+            <span className="truncate font-bold">{file.name}</span>
           </a>
         ))}
       </div>
@@ -192,6 +198,8 @@ export function ResponseDetails({
   const [uploading, setUploading] = useState<Record<string, boolean>>({});
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
   const [currentSectionId, setCurrentSectionId] = useState<string>('parte-1');
+  /** 'all' | sectionId mientras se genera un zip de evidencias */
+  const [zipLoading, setZipLoading] = useState<string | null>(null);
   const prevResponseIdRef = useRef(response.id);
 
   const stages: StagesMap = response.stages || {};
@@ -245,6 +253,40 @@ export function ResponseDetails({
   );
 
   const hasUnsavedChanges = Object.keys(answersDiff).length > 0;
+  const canDownloadAll = hasAnyEvidences(response);
+
+  /** Descarga evidencias de una parte como .zip */
+  const handleDownloadPartZip = useCallback(
+    async (sectionId: string) => {
+      setZipLoading(sectionId);
+      try {
+        await downloadPartZip(response, sectionId);
+        toast.success('Evidencias descargadas');
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : 'No se pudo descargar el zip'
+        );
+      } finally {
+        setZipLoading(null);
+      }
+    },
+    [response]
+  );
+
+  /** Descarga todas las evidencias en un .zip con subcarpetas por parte */
+  const handleDownloadAllZip = useCallback(async () => {
+    setZipLoading('all');
+    try {
+      await downloadAllZip(response);
+      toast.success('Todas las evidencias descargadas');
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : 'No se pudo descargar el zip'
+      );
+    } finally {
+      setZipLoading(null);
+    }
+  }, [response]);
 
   const updateEditedAnswer = useCallback((questionId: string, value: AnswerValue) => {
     setEditedAnswers((prev) => ({ ...prev, [questionId]: value }));
@@ -354,9 +396,35 @@ export function ResponseDetails({
 
     if (questions.length === 0) return null;
 
+    // Botón de zip al lado del título "Evidencias" (donde está la lista de archivos)
+    const evidenceQuestion = module.questions.find((q) => q.type === 'evidence');
+    const evidenceAnswer = evidenceQuestion
+      ? activeAnswers[evidenceQuestion.id]
+      : undefined;
+    const partEvidenceCount =
+      evidenceAnswer && isEvidence(evidenceAnswer) ? evidenceAnswer.length : 0;
+
     return (
       <div key={`${sectionId}-${moduleId}`} className="space-y-3 pl-2 border-l-2 border-muted">
-        <h5 className="font-medium text-base">{module.title}</h5>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <h5 className="font-medium text-base">{module.title}</h5>
+          {partEvidenceCount > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0 self-start sm:self-auto"
+              disabled={zipLoading !== null}
+              onClick={() => handleDownloadPartZip(sectionId)}
+            >
+              {zipLoading === sectionId ? (
+                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4 mr-1" />
+              )}
+              Descargar evidencias (.zip)
+            </Button>
+          )}
+        </div>
         {module.description && (
           <p className="text-sm text-muted-foreground">{module.description}</p>
         )}
@@ -659,6 +727,22 @@ export function ResponseDetails({
 
   return (
     <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!canDownloadAll || zipLoading !== null}
+          onClick={handleDownloadAllZip}
+        >
+          {zipLoading === 'all' ? (
+            <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+          ) : (
+            <Download className="w-4 h-4 mr-1" />
+          )}
+          Descargar todas las evidencias (.zip)
+        </Button>
+      </div>
+
       {canEdit && hasUnsavedChanges && (
         <div className="sticky top-0 z-10 -mx-1 px-1 pb-2 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
           <div className="rounded-xl border border-blue-300 bg-blue-50/80 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm">

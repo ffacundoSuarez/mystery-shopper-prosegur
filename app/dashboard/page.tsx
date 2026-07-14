@@ -2,10 +2,95 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  ChartTooltip,
+  CANAL_COLORS,
+  CATEGORIA_COLORS,
+  PAIS_COLORS,
+  STAGE_STACK_COLORS,
+} from '@/components/dashboard/ChartTooltip';
 import { adminListResponsesSummary } from '@/lib/data';
 import { getSectionTitle, REVIEWABLE_SECTIONS } from '@/lib/survey-config';
+import { getScreeningSnapshot } from '@/lib/survey-snapshot';
 import { SurveyResponse } from '@/lib/types';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from 'recharts';
 import { ClipboardCheck, FileCheck2, Clock, UserPlus, Loader2 } from 'lucide-react';
+
+type CrossRow = Record<string, string | number>;
+
+/**
+ * Cuenta filas × series (ej. país × categoría) y devuelve filas listas para Recharts.
+ * Cada fila tiene `name` (clave de fila) + una clave numérica por serie.
+ */
+function crossCount(
+  items: SurveyResponse[],
+  getRowKey: (r: SurveyResponse) => string | undefined,
+  getSeriesKey: (r: SurveyResponse) => string | undefined,
+  options?: { rowFallback?: string; seriesFallback?: string; seriesOrder?: string[] }
+): { rows: CrossRow[]; seriesKeys: string[] } {
+  const rowFallback = options?.rowFallback ?? 'Sin dato';
+  const seriesFallback = options?.seriesFallback ?? 'Sin dato';
+  const map = new Map<string, Map<string, number>>();
+  const seriesSeen = new Set<string>();
+
+  for (const r of items) {
+    const rowKey = getRowKey(r) || rowFallback;
+    const seriesKey = getSeriesKey(r) || seriesFallback;
+    seriesSeen.add(seriesKey);
+    if (!map.has(rowKey)) map.set(rowKey, new Map());
+    const seriesMap = map.get(rowKey)!;
+    seriesMap.set(seriesKey, (seriesMap.get(seriesKey) || 0) + 1);
+  }
+
+  const seriesKeys =
+    options?.seriesOrder?.filter((k) => seriesSeen.has(k)) ??
+    [...seriesSeen].sort((a, b) => a.localeCompare(b, 'es'));
+
+  const rows: CrossRow[] = [...map.entries()]
+    .map(([name, seriesMap]) => {
+      const row: CrossRow = { name };
+      let total = 0;
+      for (const key of seriesKeys) {
+        const v = seriesMap.get(key) || 0;
+        row[key] = v;
+        total += v;
+      }
+      // Series vistas fuera del orden fijo (si lo hay)
+      for (const [key, v] of seriesMap) {
+        if (!(key in row)) {
+          row[key] = v;
+          total += v;
+        }
+      }
+      row.__total = total;
+      return row;
+    })
+    .sort((a, b) => Number(b.__total) - Number(a.__total))
+    .map(({ __total: _omit, ...rest }) => rest);
+
+  // Incluir series extra encontradas si no estaban en seriesOrder
+  for (const row of rows) {
+    for (const key of Object.keys(row)) {
+      if (key !== 'name' && !seriesKeys.includes(key)) seriesKeys.push(key);
+    }
+  }
+
+  return { rows, seriesKeys };
+}
+
+/** Color estable para un país (palette conocida o fallback por índice). */
+function colorForPais(pais: string, index: number): string {
+  return PAIS_COLORS[pais] || ['#FFDE00', '#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#a855f7', '#06b6d4', '#64748b'][index % 8];
+}
 
 export default function DashboardPage() {
   const [responses, setResponses] = useState<SurveyResponse[]>([]);
@@ -21,8 +106,12 @@ export default function DashboardPage() {
     })();
   }, []);
 
+  const realResponses = useMemo(
+    () => responses.filter((r) => !r.isPrueba),
+    [responses]
+  );
+
   const counts = useMemo(() => {
-    const realResponses = responses.filter((r) => !r.isPrueba);
     let approvedStages = 0;
     let pendingReviews = 0;
     for (const r of realResponses) {
@@ -37,7 +126,93 @@ export default function DashboardPage() {
       pendingReviews,
       approvedStages,
     };
-  }, [responses]);
+  }, [realResponses]);
+
+  /** País × Categoría (Hogares / Negocios) — barras agrupadas */
+  const paisCategoria = useMemo(
+    () =>
+      crossCount(
+        realResponses,
+        (r) => getScreeningSnapshot(r.answers).pais,
+        (r) => getScreeningSnapshot(r.answers).categoria,
+        { rowFallback: 'Sin país', seriesFallback: 'Sin categoría', seriesOrder: ['Hogares', 'Negocios'] }
+      ),
+    [realResponses]
+  );
+
+  /** País × Canal (Telefónico / Presencial) — barras agrupadas */
+  const paisCanal = useMemo(
+    () =>
+      crossCount(
+        realResponses,
+        (r) => getScreeningSnapshot(r.answers).pais,
+        (r) => getScreeningSnapshot(r.answers).canal,
+        {
+          rowFallback: 'Sin país',
+          seriesFallback: 'Sin canal',
+          seriesOrder: ['Telefónico', 'Presencial'],
+        }
+      ),
+    [realResponses]
+  );
+
+  /** País × Estado de etapas — barras apiladas (cuenta stages, no encuestas) */
+  const paisEstado = useMemo(() => {
+    const map = new Map<
+      string,
+      { name: string; aprobada: number; en_revision: number; rechazada: number; total: number }
+    >();
+    for (const r of realResponses) {
+      const name = getScreeningSnapshot(r.answers).pais || 'Sin país';
+      if (!map.has(name)) {
+        map.set(name, { name, aprobada: 0, en_revision: 0, rechazada: 0, total: 0 });
+      }
+      const row = map.get(name)!;
+      for (const st of Object.values(r.stages || {})) {
+        if (st.status === 'aprobada') {
+          row.aprobada++;
+          row.total++;
+        } else if (st.status === 'en_revision') {
+          row.en_revision++;
+          row.total++;
+        } else if (st.status === 'rechazada') {
+          row.rechazada++;
+          row.total++;
+        }
+      }
+    }
+    return [...map.values()]
+      .sort((a, b) => b.total - a.total)
+      .map(({ total: _t, ...rest }) => rest);
+  }, [realResponses]);
+
+  /** Categoría × Canal — barras agrupadas */
+  const categoriaCanal = useMemo(
+    () =>
+      crossCount(
+        realResponses,
+        (r) => getScreeningSnapshot(r.answers).categoria,
+        (r) => getScreeningSnapshot(r.answers).canal,
+        {
+          rowFallback: 'Sin categoría',
+          seriesFallback: 'Sin canal',
+          seriesOrder: ['Telefónico', 'Presencial'],
+        }
+      ),
+    [realResponses]
+  );
+
+  /** Marca × País — barras apiladas; seriesKeys = países presentes */
+  const marcaPais = useMemo(
+    () =>
+      crossCount(
+        realResponses,
+        (r) => getScreeningSnapshot(r.answers).marca,
+        (r) => getScreeningSnapshot(r.answers).pais,
+        { rowFallback: 'Sin marca', seriesFallback: 'Sin país' }
+      ),
+    [realResponses]
+  );
 
   const stats = [
     {
@@ -110,17 +285,222 @@ export default function DashboardPage() {
         ))}
       </div>
 
+      <div>
+        <h2 className="text-lg font-semibold">Cruces</h2>
+        <p className="text-sm text-muted-foreground">
+          Métricas combinadas por país, categoría y canal
+        </p>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* País × Categoría */}
+        <Card>
+          <CardHeader>
+            <CardTitle>País × Categoría</CardTitle>
+            <CardDescription>Hogares y negocios por país</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={paisCategoria.rows}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip
+                    content={<ChartTooltip />}
+                    cursor={{ fill: 'rgba(15,23,42,0.05)' }}
+                    wrapperStyle={{ outline: 'none' }}
+                  />
+                  <Legend />
+                  <Bar
+                    dataKey="Hogares"
+                    name="Hogares"
+                    fill={CATEGORIA_COLORS.Hogares}
+                    radius={[4, 4, 0, 0]}
+                  />
+                  <Bar
+                    dataKey="Negocios"
+                    name="Negocios"
+                    fill={CATEGORIA_COLORS.Negocios}
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* País × Canal */}
+        <Card>
+          <CardHeader>
+            <CardTitle>País × Canal</CardTitle>
+            <CardDescription>Telefónico y presencial por país</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={paisCanal.rows}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip
+                    content={<ChartTooltip />}
+                    cursor={{ fill: 'rgba(15,23,42,0.05)' }}
+                    wrapperStyle={{ outline: 'none' }}
+                  />
+                  <Legend />
+                  <Bar
+                    dataKey="Telefónico"
+                    name="Telefónico"
+                    fill={CANAL_COLORS.Telefónico}
+                    radius={[4, 4, 0, 0]}
+                  />
+                  <Bar
+                    dataKey="Presencial"
+                    name="Presencial"
+                    fill={CANAL_COLORS.Presencial}
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* País × Estado de etapas */}
+        <Card>
+          <CardHeader>
+            <CardTitle>País × Estado de etapas</CardTitle>
+            <CardDescription>
+              Etapas aprobadas, en revisión y rechazadas por país
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={paisEstado}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip
+                    content={<ChartTooltip />}
+                    cursor={{ fill: 'rgba(15,23,42,0.05)' }}
+                    wrapperStyle={{ outline: 'none' }}
+                  />
+                  <Legend />
+                  <Bar
+                    dataKey="aprobada"
+                    name="Aprobada"
+                    stackId="a"
+                    fill={STAGE_STACK_COLORS.aprobada}
+                  />
+                  <Bar
+                    dataKey="en_revision"
+                    name="En revisión"
+                    stackId="a"
+                    fill={STAGE_STACK_COLORS.en_revision}
+                  />
+                  <Bar
+                    dataKey="rechazada"
+                    name="Rechazada"
+                    stackId="a"
+                    fill={STAGE_STACK_COLORS.rechazada}
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Categoría × Canal */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Categoría × Canal</CardTitle>
+            <CardDescription>
+              Telefónico / presencial dentro de hogares y negocios
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={categoriaCanal.rows}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip
+                    content={<ChartTooltip />}
+                    cursor={{ fill: 'rgba(15,23,42,0.05)' }}
+                    wrapperStyle={{ outline: 'none' }}
+                  />
+                  <Legend />
+                  <Bar
+                    dataKey="Telefónico"
+                    name="Telefónico"
+                    fill={CANAL_COLORS.Telefónico}
+                    radius={[4, 4, 0, 0]}
+                  />
+                  <Bar
+                    dataKey="Presencial"
+                    name="Presencial"
+                    fill={CANAL_COLORS.Presencial}
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Marca × País (ancho completo) */}
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle>Marca × País</CardTitle>
+            <CardDescription>Distribución de marcas por país</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[340px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={marcaPais.rows}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip
+                    content={<ChartTooltip />}
+                    cursor={{ fill: 'rgba(15,23,42,0.05)' }}
+                    wrapperStyle={{ outline: 'none' }}
+                  />
+                  <Legend />
+                  {marcaPais.seriesKeys.map((pais, i) => (
+                    <Bar
+                      key={pais}
+                      dataKey={pais}
+                      name={pais}
+                      stackId="a"
+                      fill={colorForPais(pais, i)}
+                      radius={
+                        i === marcaPais.seriesKeys.length - 1 ? [4, 4, 0, 0] : undefined
+                      }
+                    />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Actividad reciente</CardTitle>
           <CardDescription>Últimos postulantes actualizados</CardDescription>
         </CardHeader>
         <CardContent>
-          {responses.length === 0 ? (
+          {realResponses.length === 0 ? (
             <p className="text-sm text-muted-foreground">Sin datos todavía.</p>
           ) : (
             <div className="space-y-4">
-              {responses.filter((r) => !r.isPrueba).slice(0, 8).map((r) => {
+              {realResponses.slice(0, 8).map((r) => {
                 const pendingStages = Object.entries(r.stages || {}).filter(
                   ([, st]) => st.status === 'en_revision'
                 );
