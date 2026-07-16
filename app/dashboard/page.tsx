@@ -11,7 +11,7 @@ import {
 } from '@/components/dashboard/ChartTooltip';
 import { adminListResponsesSummary } from '@/lib/data';
 import { getSectionTitle, REVIEWABLE_SECTIONS } from '@/lib/survey-config';
-import { getScreeningSnapshot } from '@/lib/survey-snapshot';
+import { getScreeningSnapshot, hasAnsweredFirstStage } from '@/lib/survey-snapshot';
 import { SurveyResponse } from '@/lib/types';
 import {
   BarChart,
@@ -111,10 +111,19 @@ export default function DashboardPage() {
     [responses]
   );
 
+  /**
+   * Base de los cruces y métricas: solo encuestas contestadas en la primera
+   * etapa (Parte 1 enviada). Los links generados sin responder no se cuentan.
+   */
+  const answeredResponses = useMemo(
+    () => realResponses.filter((r) => hasAnsweredFirstStage(r.stages)),
+    [realResponses]
+  );
+
   const counts = useMemo(() => {
     let approvedStages = 0;
     let pendingReviews = 0;
-    for (const r of realResponses) {
+    for (const r of answeredResponses) {
       for (const sectionId of REVIEWABLE_SECTIONS) {
         const status = r.stages?.[sectionId]?.status;
         if (status === 'en_revision') pendingReviews++;
@@ -123,28 +132,29 @@ export default function DashboardPage() {
     }
     return {
       postulantes: realResponses.length,
+      contestadas: answeredResponses.length,
       pendingReviews,
       approvedStages,
     };
-  }, [realResponses]);
+  }, [realResponses, answeredResponses]);
 
   /** País × Categoría (Hogares / Negocios) — barras agrupadas */
   const paisCategoria = useMemo(
     () =>
       crossCount(
-        realResponses,
+        answeredResponses,
         (r) => getScreeningSnapshot(r.answers).pais,
         (r) => getScreeningSnapshot(r.answers).categoria,
         { rowFallback: 'Sin país', seriesFallback: 'Sin categoría', seriesOrder: ['Hogares', 'Negocios'] }
       ),
-    [realResponses]
+    [answeredResponses]
   );
 
   /** País × Canal (Telefónico / Presencial) — barras agrupadas */
   const paisCanal = useMemo(
     () =>
       crossCount(
-        realResponses,
+        answeredResponses,
         (r) => getScreeningSnapshot(r.answers).pais,
         (r) => getScreeningSnapshot(r.answers).canal,
         {
@@ -153,7 +163,7 @@ export default function DashboardPage() {
           seriesOrder: ['Telefónico', 'Presencial'],
         }
       ),
-    [realResponses]
+    [answeredResponses]
   );
 
   /** País × Estado de etapas — barras apiladas (cuenta stages, no encuestas) */
@@ -162,7 +172,7 @@ export default function DashboardPage() {
       string,
       { name: string; aprobada: number; en_revision: number; rechazada: number; total: number }
     >();
-    for (const r of realResponses) {
+    for (const r of answeredResponses) {
       const name = getScreeningSnapshot(r.answers).pais || 'Sin país';
       if (!map.has(name)) {
         map.set(name, { name, aprobada: 0, en_revision: 0, rechazada: 0, total: 0 });
@@ -184,13 +194,13 @@ export default function DashboardPage() {
     return [...map.values()]
       .sort((a, b) => b.total - a.total)
       .map(({ total: _t, ...rest }) => rest);
-  }, [realResponses]);
+  }, [answeredResponses]);
 
   /** Categoría × Canal — barras agrupadas */
   const categoriaCanal = useMemo(
     () =>
       crossCount(
-        realResponses,
+        answeredResponses,
         (r) => getScreeningSnapshot(r.answers).categoria,
         (r) => getScreeningSnapshot(r.answers).canal,
         {
@@ -199,19 +209,19 @@ export default function DashboardPage() {
           seriesOrder: ['Telefónico', 'Presencial'],
         }
       ),
-    [realResponses]
+    [answeredResponses]
   );
 
   /** Marca × País — barras apiladas; seriesKeys = países presentes */
   const marcaPais = useMemo(
     () =>
       crossCount(
-        realResponses,
+        answeredResponses,
         (r) => getScreeningSnapshot(r.answers).marca,
         (r) => getScreeningSnapshot(r.answers).pais,
         { rowFallback: 'Sin marca', seriesFallback: 'Sin país' }
       ),
-    [realResponses]
+    [answeredResponses]
   );
 
   const stats = [
@@ -240,9 +250,9 @@ export default function DashboardPage() {
       bgColor: 'bg-green-100',
     },
     {
-      title: 'Total registros',
-      value: counts.postulantes,
-      description: 'Encuestas activas',
+      title: 'Encuestas contestadas',
+      value: counts.contestadas,
+      description: 'Con Parte 1 enviada',
       icon: ClipboardCheck,
       color: 'text-purple-600',
       bgColor: 'bg-purple-100',
@@ -288,7 +298,7 @@ export default function DashboardPage() {
       <div>
         <h2 className="text-lg font-semibold">Cruces</h2>
         <p className="text-sm text-muted-foreground">
-          Métricas combinadas por país, categoría y canal
+          Métricas combinadas por país, categoría y canal — solo encuestas contestadas (Parte 1 enviada)
         </p>
       </div>
 

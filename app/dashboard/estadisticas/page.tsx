@@ -12,7 +12,7 @@ import {
 import { adminListResponsesSummary } from '@/lib/data';
 import { getSectionTitle, REVIEWABLE_SECTIONS } from '@/lib/survey-config';
 import { PAISES } from '@/lib/survey-config/constants';
-import { getScreeningSnapshot } from '@/lib/survey-snapshot';
+import { getScreeningSnapshot, hasAnsweredFirstStage } from '@/lib/survey-snapshot';
 import { SurveyResponse } from '@/lib/types';
 import {
   ChartTooltip,
@@ -71,8 +71,13 @@ export default function EstadisticasPage() {
     })();
   }, []);
 
+  /**
+   * Base de todas las estadísticas: encuestas reales (no prueba) que fueron
+   * contestadas en la primera etapa (Parte 1 enviada). Los links generados
+   * sin responder no se cuentan.
+   */
   const realResponses = useMemo(
-    () => responses.filter((r) => !r.isPrueba),
+    () => responses.filter((r) => !r.isPrueba && hasAnsweredFirstStage(r.stages)),
     [responses]
   );
 
@@ -249,11 +254,13 @@ export default function EstadisticasPage() {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Estadísticas</h1>
-          <p className="text-muted-foreground">Análisis de los formularios cargados</p>
+          <p className="text-muted-foreground">
+            Análisis de las encuestas contestadas (Parte 1 enviada)
+          </p>
         </div>
         <Card>
           <CardContent className="py-16 text-center text-muted-foreground">
-            Todavía no hay datos para mostrar.
+            Todavía no hay encuestas contestadas para mostrar.
           </CardContent>
         </Card>
       </div>
@@ -264,12 +271,14 @@ export default function EstadisticasPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Estadísticas</h1>
-        <p className="text-muted-foreground">Análisis de los formularios cargados</p>
+        <p className="text-muted-foreground">
+          Análisis de las encuestas contestadas (Parte 1 enviada)
+        </p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {[
-          { label: 'Total encuestas', value: realResponses.length },
+          { label: 'Encuestas contestadas', value: realResponses.length },
           { label: 'Etapas en revisión', value: stageStats.inReview },
           { label: 'Etapas aprobadas', value: stageStats.approved },
           { label: 'Etapas rechazadas', value: stageStats.rejected },
