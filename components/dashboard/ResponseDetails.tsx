@@ -12,6 +12,13 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { QuestionInput } from '@/components/survey/QuestionInput';
 import {
   REVIEWABLE_SECTIONS,
@@ -90,6 +97,8 @@ interface ResponseDetailsProps {
   allowEditAnswers?: boolean;
   onApproveStage?: (sectionId: string) => void;
   onSendCorrections?: (sectionId: string, reviewFlags: ReviewFlagsMap) => void | Promise<void>;
+  /** Cambia el estado de una etapa (en_revision / aprobada / rechazada) sin exigir flags */
+  onSetStageStatus?: (sectionId: string, status: StageStatus) => void | Promise<void>;
   onSaveAnswers?: (answers: Record<string, AnswerValue>) => void | Promise<void>;
   actionLoading?: string | null;
   saveLoading?: boolean;
@@ -186,6 +195,7 @@ export function ResponseDetails({
   allowEditAnswers = false,
   onApproveStage,
   onSendCorrections,
+  onSetStageStatus,
   onSaveAnswers,
   actionLoading,
   saveLoading = false,
@@ -662,7 +672,7 @@ export function ResponseDetails({
             )}
           </div>
 
-          <div className="flex flex-wrap gap-2 shrink-0">
+          <div className="flex flex-wrap gap-2 shrink-0 items-center">
             {canEdit && sectionHasChanges && (
               <Button
                 size="sm"
@@ -679,6 +689,30 @@ export function ResponseDetails({
                 Guardar cambios ({sectionDiffKeys.length})
               </Button>
             )}
+
+            {/* Selector de estado: permite reabrir aprobadas / cambiar entre estados */}
+            {showStageActions &&
+              onSetStageStatus &&
+              stageStatus &&
+              stageStatus !== 'pendiente' && (
+                <Select
+                  value={stageStatus}
+                  disabled={actionLoading === sectionId}
+                  onValueChange={(value) => {
+                    if (value === stageStatus) return;
+                    onSetStageStatus(sectionId, value as StageStatus);
+                  }}
+                >
+                  <SelectTrigger className="h-8 w-[160px] text-sm">
+                    <SelectValue placeholder="Estado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="en_revision">En revisión</SelectItem>
+                    <SelectItem value="aprobada">Aprobada</SelectItem>
+                    <SelectItem value="rechazada">Rechazada</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
 
             {showStageActions && stageStatus === 'en_revision' && (
               <>

@@ -141,7 +141,7 @@ export default function RevisionPage() {
 
   const handleReview = async (
     sectionId: string,
-    action: 'aprobar' | 'rechazar',
+    action: 'aprobar' | 'rechazar' | 'en_revision',
     reviewFlags?: import('@/lib/types').ReviewFlagsMap
   ) => {
     if (!selected) return;
@@ -160,16 +160,35 @@ export default function RevisionPage() {
         prev.map((r) => (r.id === updated.id ? updated : r))
       );
 
-      toast.success(
+      const title = getSectionTitle(sectionId);
+      const toastMsg =
         action === 'aprobar'
-          ? `Etapa "${getSectionTitle(sectionId)}" aprobada`
-          : `Correcciones enviadas en "${getSectionTitle(sectionId)}"`
-      );
+          ? `Etapa "${title}" aprobada`
+          : action === 'en_revision'
+            ? `Etapa "${title}" puesta en revisión`
+            : reviewFlags && Object.keys(reviewFlags).length > 0
+              ? `Correcciones enviadas en "${title}"`
+              : `Etapa "${title}" marcada como rechazada`;
+      toast.success(toastMsg);
     } catch {
       toast.error('No se pudo procesar la revisión');
     } finally {
       setActionLoading(null);
     }
+  };
+
+  /** Mapea el status elegido en el Select al action del RPC */
+  const handleSetStageStatus = async (sectionId: string, status: StageStatus) => {
+    const action =
+      status === 'aprobada'
+        ? 'aprobar'
+        : status === 'rechazada'
+          ? 'rechazar'
+          : status === 'en_revision'
+            ? 'en_revision'
+            : null;
+    if (!action) return;
+    await handleReview(sectionId, action);
   };
 
   const handleSaveAnswers = async (answersDiff: Record<string, AnswerValue>) => {
@@ -474,6 +493,7 @@ export default function RevisionPage() {
               onSendCorrections={(sectionId, flags) =>
                 handleReview(sectionId, 'rechazar', flags)
               }
+              onSetStageStatus={handleSetStageStatus}
               onSaveAnswers={handleSaveAnswers}
             />
           )}

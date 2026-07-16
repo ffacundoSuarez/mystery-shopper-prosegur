@@ -194,7 +194,7 @@ export async function adminGetPendingReviews(): Promise<PendingReviewItem[]> {
 export async function adminReviewStage(
   responseId: string,
   sectionId: string,
-  action: 'aprobar' | 'rechazar',
+  action: 'aprobar' | 'rechazar' | 'en_revision',
   reviewedBy = 'Ops',
   rejectionMessage?: string,
   reviewFlags?: ReviewFlagsMap
