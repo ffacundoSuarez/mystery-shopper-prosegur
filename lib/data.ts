@@ -194,7 +194,7 @@ export async function adminGetPendingReviews(): Promise<PendingReviewItem[]> {
 export async function adminReviewStage(
   responseId: string,
   sectionId: string,
-  action: 'aprobar' | 'rechazar',
+  action: 'aprobar' | 'rechazar' | 'en_revision',
   reviewedBy = 'Ops',
   rejectionMessage?: string,
   reviewFlags?: ReviewFlagsMap
@@ -232,6 +232,22 @@ export async function adminDeletePostulante(responseId: string): Promise<void> {
     p_response_id: responseId,
   });
   if (error) throw error;
+}
+
+/** Actualiza nombre/apellido y reclutador sin tocar país, idioma ni is_prueba */
+export async function adminUpdatePostulante(
+  responseId: string,
+  nombreApellido: string,
+  reclutador?: string
+): Promise<SurveyResponse> {
+  const { data, error } = await supabase.rpc('prosegur_admin_update_postulante', {
+    p_passcode: requireOpsPasscode(),
+    p_response_id: responseId,
+    p_nombre_apellido: nombreApellido,
+    p_reclutador: reclutador?.trim() || null,
+  });
+  if (error) throw error;
+  return parseResponse(data as Record<string, unknown>);
 }
 
 /** Quita marcas de cierre para que el postulante pueda editar de nuevo */

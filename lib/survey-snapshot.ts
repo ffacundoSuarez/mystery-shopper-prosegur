@@ -98,6 +98,16 @@ export function getScreeningSnapshot(
   };
 }
 
+/**
+ * True si la encuesta fue contestada en la primera etapa:
+ * la Parte 1 fue enviada (status distinto de pendiente).
+ * Se usa para que las estadísticas no cuenten links generados sin responder.
+ */
+export function hasAnsweredFirstStage(stages: StagesMap = {}): boolean {
+  const status = stages['parte-1']?.status;
+  return Boolean(status && status !== 'pendiente');
+}
+
 /** Texto corto de progreso por partes */
 export function getPartProgressLabel(
   stages: StagesMap = {},

@@ -6,6 +6,7 @@ import {
   adminDeletePostulante,
   adminListResponsesSummary,
   adminUnlockSurvey,
+  adminUpdatePostulante,
 } from '@/lib/data';
 import { PAISES } from '@/lib/survey-config/constants';
 import { getPartProgressLabel, getScreeningSnapshot } from '@/lib/survey-snapshot';
@@ -43,6 +44,7 @@ import {
   Link as LinkIcon,
   Loader2,
   MoreHorizontal,
+  Pencil,
   Plus,
   Search,
   Trash2,
@@ -68,6 +70,10 @@ export default function PostulantesPage() {
   const [isPrueba, setIsPrueba] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<SurveyResponse | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [editTarget, setEditTarget] = useState<SurveyResponse | null>(null);
+  const [editNombreApellido, setEditNombreApellido] = useState('');
+  const [editReclutador, setEditReclutador] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
   const [reopeningId, setReopeningId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterPais, setFilterPais] = useState('all');
@@ -178,6 +184,53 @@ export default function PostulantesPage() {
       toast.error('No se pudo eliminar el postulante');
     } finally {
       setDeleting(false);
+    }
+  };
+
+  /** Abre el modal de edición precargando nombre y reclutador actuales */
+  const openEditDialog = (postulante: SurveyResponse) => {
+    const name =
+      postulante.nombreApellido ||
+      [postulante.nombre, postulante.apellido].filter(Boolean).join(' ') ||
+      '';
+    setEditNombreApellido(name);
+    setEditReclutador((postulante.answers?.['reclutador'] as string) || '');
+    setEditTarget(postulante);
+  };
+
+  const handleEditSave = async () => {
+    if (!editTarget) return;
+    if (!editNombreApellido.trim()) {
+      toast.error('Completá nombre y apellido');
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      const updated = await adminUpdatePostulante(
+        editTarget.id,
+        editNombreApellido.trim(),
+        editReclutador.trim() || undefined
+      );
+      setPostulantes((prev) =>
+        prev.map((p) =>
+          p.id === updated.id
+            ? {
+                ...p,
+                nombre: updated.nombre,
+                apellido: updated.apellido,
+                nombreApellido: updated.nombreApellido,
+                answers: updated.answers,
+                updatedAt: updated.updatedAt,
+              }
+            : p
+        )
+      );
+      toast.success(`Datos de ${updated.code || updated.id} actualizados`);
+      setEditTarget(null);
+    } catch {
+      toast.error('No se pudieron guardar los cambios');
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -399,6 +452,10 @@ export default function PostulantesPage() {
                                     </a>
                                   </DropdownMenuItem>
                                 )}
+                                <DropdownMenuItem onClick={() => openEditDialog(p)}>
+                                  <Pencil className="w-4 h-4 mr-2" />
+                                  Editar datos
+                                </DropdownMenuItem>
                                 <DropdownMenuItem
                                   disabled={reopeningId === p.id}
                                   onClick={() => handleReopenSurvey(p)}
@@ -518,6 +575,57 @@ export default function PostulantesPage() {
             <Button onClick={handleCreate} disabled={creating}>
               {creating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Crear postulante
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!editTarget}
+        onOpenChange={(open) => {
+          if (!open) setEditTarget(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar datos</DialogTitle>
+            <DialogDescription>
+              Actualizá el nombre y el reclutador de{' '}
+              <strong>{editTarget?.code || editTarget?.id}</strong>. País, idioma y tipo
+              (prueba) no se pueden cambiar para no romper el ID.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="edit-nombre-apellido">Nombre y apellido</Label>
+              <Input
+                id="edit-nombre-apellido"
+                value={editNombreApellido}
+                onChange={(e) => setEditNombreApellido(e.target.value)}
+                placeholder="Ej: Juan Pérez"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-reclutador">Reclutador</Label>
+              <Input
+                id="edit-reclutador"
+                value={editReclutador}
+                onChange={(e) => setEditReclutador(e.target.value)}
+                placeholder="Nombre del reclutador"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditTarget(null)}
+              disabled={savingEdit}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={handleEditSave} disabled={savingEdit}>
+              {savingEdit && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Guardar cambios
             </Button>
           </DialogFooter>
         </DialogContent>
