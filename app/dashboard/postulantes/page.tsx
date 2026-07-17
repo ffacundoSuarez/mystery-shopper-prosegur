@@ -350,7 +350,7 @@ export default function PostulantesPage() {
                     <th className="text-left p-3 font-medium">Nombre</th>
                     <th className="text-left p-3 font-medium">País</th>
                     <th className="text-left p-3 font-medium hidden md:table-cell">Progreso</th>
-                    <th className="text-left p-3 font-medium hidden lg:table-cell">Link</th>
+                    <th className="text-left p-3 font-medium hidden xl:table-cell">Link</th>
                     <th className="text-right p-3 pr-6 font-medium">Acciones</th>
                   </tr>
                 </thead>
@@ -377,7 +377,7 @@ export default function PostulantesPage() {
                             )}
                           </span>
                         </td>
-                        <td className="p-3 whitespace-nowrap">
+                        <td className="p-3">
                           <span className="inline-flex flex-col">
                             <span>{displayName}</span>
                             {reclutador && (
@@ -401,10 +401,10 @@ export default function PostulantesPage() {
                             <span className="text-muted-foreground">—</span>
                           )}
                         </td>
-                        <td className="p-3 hidden md:table-cell text-muted-foreground whitespace-nowrap">
+                        <td className="p-3 hidden md:table-cell text-muted-foreground">
                           {progress}
                         </td>
-                        <td className="p-3 hidden lg:table-cell max-w-[12rem]">
+                        <td className="p-3 hidden xl:table-cell max-w-48">
                           <span className="text-muted-foreground truncate block">
                             {p.accessToken ? getSurveyUrl(p.accessToken) : '-'}
                           </span>
