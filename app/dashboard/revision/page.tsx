@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -20,10 +21,19 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
+import {
   ResponseDetails,
   REVISION_STATUS_LABELS,
   STAGE_STATUS_COLORS,
 } from '@/components/dashboard/ResponseDetails';
+import { RevisionDownloadDialog } from '@/components/dashboard/RevisionDownloadDialog';
 import {
   adminListResponsesSummary,
   adminReviewStage,
@@ -35,7 +45,15 @@ import { getSectionTitle, REVIEWABLE_SECTIONS } from '@/lib/survey-config';
 import { PAISES } from '@/lib/survey-config/constants';
 import { getScreeningSnapshot } from '@/lib/survey-snapshot';
 import { AnswerValue, StageStatus, SurveyResponse } from '@/lib/types';
-import { Eye, Building2, MapPin, Clock, Loader2, Filter } from 'lucide-react';
+import {
+  Eye,
+  Building2,
+  MapPin,
+  Clock,
+  Loader2,
+  Filter,
+  Download,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -75,6 +93,8 @@ export default function RevisionPage() {
   const [filterEstado, setFilterEstado] = useState('all');
   const [filterPais, setFilterPais] = useState('all');
   const [filterTipo, setFilterTipo] = useState<'all' | 'real' | 'prueba'>('all');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [downloadOpen, setDownloadOpen] = useState(false);
 
   const load = async () => {
     try {
@@ -138,6 +158,27 @@ export default function RevisionPage() {
     () => filteredResponses.reduce((sum, r) => sum + pendingStageIds(r).length, 0),
     [filteredResponses]
   );
+
+  /** Cantidad de filtros del panel (excluye el buscador de nombre) */
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filterEmpresa.trim()) count += 1;
+    if (filterId.trim()) count += 1;
+    if (filterEtapa !== 'all') count += 1;
+    if (filterEstado !== 'all') count += 1;
+    if (filterPais !== 'all') count += 1;
+    if (filterTipo !== 'all') count += 1;
+    return count;
+  }, [filterEmpresa, filterId, filterEtapa, filterEstado, filterPais, filterTipo]);
+
+  const clearFilters = () => {
+    setFilterEmpresa('');
+    setFilterId('');
+    setFilterEtapa('all');
+    setFilterEstado('all');
+    setFilterPais('all');
+    setFilterTipo('all');
+  };
 
   const handleReview = async (
     sectionId: string,
@@ -261,75 +302,37 @@ export default function RevisionPage() {
 
         <div className="flex flex-wrap items-center gap-2 xl:justify-end">
           <Input
-            placeholder="Nombre"
+            placeholder="Buscar por nombre..."
             value={filterNombre}
             onChange={(e) => setFilterNombre(e.target.value)}
-            className="h-9 w-full sm:w-36"
+            className="h-9 w-full sm:w-56"
           />
-          <Input
-            placeholder="Empresa"
-            value={filterEmpresa}
-            onChange={(e) => setFilterEmpresa(e.target.value)}
-            className="h-9 w-full sm:w-36"
-          />
-          <Input
-            placeholder="ID"
-            value={filterId}
-            onChange={(e) => setFilterId(e.target.value)}
-            className="h-9 w-full sm:w-28"
-          />
-          <Select value={filterEtapa} onValueChange={setFilterEtapa}>
-            <SelectTrigger className="h-9 w-full sm:w-44">
-              <SelectValue placeholder="Etapa" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas las etapas</SelectItem>
-              {REVIEWABLE_SECTIONS.map((sectionId) => (
-                <SelectItem key={sectionId} value={sectionId}>
-                  {getSectionTitle(sectionId)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={filterEstado} onValueChange={setFilterEstado}>
-            <SelectTrigger className="h-9 w-full sm:w-40">
-              <SelectValue placeholder="Estado" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos los estados</SelectItem>
-              <SelectItem value="en_revision">En revisión</SelectItem>
-              <SelectItem value="aprobada">Aprobada</SelectItem>
-              <SelectItem value="rechazada">Rechazada</SelectItem>
-              <SelectItem value="pendiente">Pendiente</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={filterPais} onValueChange={setFilterPais}>
-            <SelectTrigger className="h-9 w-full sm:w-44">
-              <Filter className="w-4 h-4 mr-2 shrink-0" />
-              <SelectValue placeholder="País" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos los países</SelectItem>
-              {PAISES.map((p) => (
-                <SelectItem key={p.value} value={p.value}>
-                  {p.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={filterTipo}
-            onValueChange={(v) => setFilterTipo(v as 'all' | 'real' | 'prueba')}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9"
+            onClick={() => setFiltersOpen(true)}
           >
-            <SelectTrigger className="h-9 w-full sm:w-36">
-              <SelectValue placeholder="Tipo" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="real">Reales</SelectItem>
-              <SelectItem value="prueba">Pruebas</SelectItem>
-            </SelectContent>
-          </Select>
+            <Filter className="w-4 h-4 mr-2" />
+            Filtros
+            {activeFilterCount > 0 && (
+              <Badge
+                variant="secondary"
+                className="ml-2 h-5 min-w-5 px-1.5 text-[10px]"
+              >
+                {activeFilterCount}
+              </Badge>
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9"
+            onClick={() => setDownloadOpen(true)}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Descargar
+          </Button>
         </div>
       </div>
 
@@ -499,6 +502,126 @@ export default function RevisionPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Panel de filtros */}
+      <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+        <SheetContent side="right" className="overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Filtros</SheetTitle>
+            <SheetDescription>
+              Filtrá la lista de postulantes. El buscador de nombre queda en la barra.
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="flex flex-col gap-4 px-4">
+            <div className="space-y-2">
+              <Label htmlFor="filter-empresa">Empresa</Label>
+              <Input
+                id="filter-empresa"
+                placeholder="Ej. Prosegur, Verisure..."
+                value={filterEmpresa}
+                onChange={(e) => setFilterEmpresa(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="filter-id">ID</Label>
+              <Input
+                id="filter-id"
+                placeholder="Código o ID"
+                value={filterId}
+                onChange={(e) => setFilterId(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Etapa</Label>
+              <Select value={filterEtapa} onValueChange={setFilterEtapa}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Etapa" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas las etapas</SelectItem>
+                  {REVIEWABLE_SECTIONS.map((sectionId) => (
+                    <SelectItem key={sectionId} value={sectionId}>
+                      {getSectionTitle(sectionId)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Estado</Label>
+              <Select value={filterEstado} onValueChange={setFilterEstado}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Estado" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los estados</SelectItem>
+                  <SelectItem value="en_revision">En revisión</SelectItem>
+                  <SelectItem value="aprobada">Aprobada</SelectItem>
+                  <SelectItem value="rechazada">Rechazada</SelectItem>
+                  <SelectItem value="pendiente">Pendiente</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>País</Label>
+              <Select value={filterPais} onValueChange={setFilterPais}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="País" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los países</SelectItem>
+                  {PAISES.map((p) => (
+                    <SelectItem key={p.value} value={p.value}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Tipo</Label>
+              <Select
+                value={filterTipo}
+                onValueChange={(v) =>
+                  setFilterTipo(v as 'all' | 'real' | 'prueba')
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="real">Reales</SelectItem>
+                  <SelectItem value="prueba">Pruebas</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <SheetFooter>
+            <Button
+              variant="outline"
+              onClick={clearFilters}
+              disabled={activeFilterCount === 0}
+            >
+              Limpiar filtros
+            </Button>
+            <Button onClick={() => setFiltersOpen(false)}>Aplicar</Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      <RevisionDownloadDialog
+        open={downloadOpen}
+        onOpenChange={setDownloadOpen}
+        responses={responses}
+      />
     </div>
   );
 }

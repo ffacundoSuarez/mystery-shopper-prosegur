@@ -224,6 +224,12 @@ export const parte1: SurveySection = {
         'Speech: "Olá, como está? O meu nome é [nome]. Ligo porque queria consultar para contratar um sistema de alarme monitorizado para a minha [casa / negócio]".',
       questions: [
         {
+          id: 'p0-fecha-contacto-compania',
+          text: 'P0. Registrar fecha y hora en que se puso en contacto con la compañía para coordinar visita / pedido de cotización telefónica',
+          textPt: 'P0. Registar data e hora em que contactou a empresa para coordenar visita / pedido de cotação telefónica',
+          type: 'datetime',
+        },
+        {
           id: 'p1-fecha-contacto',
           text: 'P1. Registrar fecha y hora del contacto',
           textPt: 'P1. Registar data e hora do contacto',
